@@ -67,45 +67,46 @@ def stats(
     end: str | None = None,
 ):
     where = []
-    params: list = []
 
     if site_id:
-        where.append("site_id = ?")
-        params.append(site_id)
+        where.append("site_id = $site_id")
     if start:
-        where.append("timestamp >= ?::TIMESTAMP")
-        params.append(start)
+        where.append("timestamp >= $start::TIMESTAMP")
     if end:
-        where.append("timestamp < ?::TIMESTAMP + INTERVAL 1 DAY")
-        params.append(end)
+        where.append("timestamp < $end::TIMESTAMP + INTERVAL 1 DAY")
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
-    total_uuids = db().execute(
-        f"SELECT COUNT(DISTINCT uuid) FROM events{clause}", params
-    ).fetchone()[0]
-    total_sessions = db().execute(
-        f"SELECT COUNT(DISTINCT session_id) FROM events{clause}", params
-    ).fetchone()[0]
-    total_events = db().execute(
-        f"SELECT COUNT(*) FROM events{clause}", params
-    ).fetchone()[0]
+    # Only include params actually referenced in the query
+    named: dict = {}
+    if site_id:
+        named["site_id"] = site_id
+    if start:
+        named["start"] = start
+    if end:
+        named["end"] = end
+
+    def q(sql: str, extra_named: dict | None = None):
+        p = {**named, **(extra_named or {})}
+        return db().execute(sql, p) if p else db().execute(sql)
+
+    totals = q(
+        f"SELECT COUNT(DISTINCT uuid), COUNT(DISTINCT session_id), COUNT(*) FROM events{clause}"
+    ).fetchone()
 
     pv_clause = clause + (" AND " if clause else " WHERE ") + "event_name = 'page_view'"
-    top_pages = db().execute(
-        f"SELECT page_path, COUNT(*) as views FROM events{pv_clause} GROUP BY page_path ORDER BY views DESC LIMIT 50",
-        params,
+    top_pages = q(
+        f"SELECT page_path, COUNT(*) as views FROM events{pv_clause} GROUP BY page_path ORDER BY views DESC LIMIT 50"
     ).fetchall()
 
-    top_events = db().execute(
-        f"SELECT event_name, COUNT(*) as count FROM events{clause} GROUP BY event_name ORDER BY count DESC LIMIT 50",
-        params,
+    top_events = q(
+        f"SELECT event_name, COUNT(*) as count FROM events{clause} GROUP BY event_name ORDER BY count DESC LIMIT 50"
     ).fetchall()
 
     return {
-        "total_uuids": total_uuids,
-        "total_sessions": total_sessions,
-        "total_events": total_events,
+        "total_uuids": totals[0],
+        "total_sessions": totals[1],
+        "total_events": totals[2],
         "top_pages": [{"page_path": r[0], "views": r[1]} for r in top_pages],
         "top_events": [{"event_name": r[0], "count": r[1]} for r in top_events],
     }
