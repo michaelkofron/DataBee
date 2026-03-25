@@ -58,44 +58,48 @@ export default function Overview({ siteId }: { siteId: string }) {
       </div>
 
       <div className="two-col">
-        <div className="card">
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', maxHeight: 480 }}>
           <div className="card-header">Top Pages</div>
-          <table className="table">
-            <thead>
-              <tr><th>Page</th><th className="text-right">Views</th></tr>
-            </thead>
-            <tbody>
-              {stats?.top_pages.map(p => (
-                <tr key={p.page_path}>
-                  <td className="text-mono">{p.page_path}</td>
-                  <td className="text-right">{p.views.toLocaleString()}</td>
-                </tr>
-              ))}
-              {stats && stats.top_pages.length === 0 && (
-                <tr><td colSpan={2} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
-              )}
-            </tbody>
-          </table>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr><th>Page</th><th className="text-right">Views</th></tr>
+              </thead>
+              <tbody>
+                {stats?.top_pages.map(p => (
+                  <tr key={p.page_path}>
+                    <td className="text-mono">{p.page_path}</td>
+                    <td className="text-right">{p.views.toLocaleString()}</td>
+                  </tr>
+                ))}
+                {stats && stats.top_pages.length === 0 && (
+                  <tr><td colSpan={2} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div className="card">
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', maxHeight: 480 }}>
           <div className="card-header">Top Events</div>
-          <table className="table">
-            <thead>
-              <tr><th>Event</th><th className="text-right">Count</th></tr>
-            </thead>
-            <tbody>
-              {stats?.top_events.map(e => (
-                <tr key={e.event_name}>
-                  <td><span className="badge-amber">{e.event_name}</span></td>
-                  <td className="text-right">{e.count.toLocaleString()}</td>
-                </tr>
-              ))}
-              {stats && stats.top_events.length === 0 && (
-                <tr><td colSpan={2} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
-              )}
-            </tbody>
-          </table>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr><th>Event</th><th className="text-right">Count</th></tr>
+              </thead>
+              <tbody>
+                {stats?.top_events.map(e => (
+                  <tr key={e.event_name}>
+                    <td><span className="badge-amber">{e.event_name}</span></td>
+                    <td className="text-right">{e.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+                {stats && stats.top_events.length === 0 && (
+                  <tr><td colSpan={2} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </>

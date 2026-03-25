@@ -93,13 +93,12 @@ def stats(
 
     pv_clause = clause + (" AND " if clause else " WHERE ") + "event_name = 'page_view'"
     top_pages = db().execute(
-        f"SELECT page_path, COUNT(*) as views FROM events{pv_clause} GROUP BY page_path ORDER BY views DESC LIMIT 10",
+        f"SELECT page_path, COUNT(*) as views FROM events{pv_clause} GROUP BY page_path ORDER BY views DESC LIMIT 50",
         params,
     ).fetchall()
 
-    ev_clause = clause + (" AND " if clause else " WHERE ") + "event_name != 'page_view'"
     top_events = db().execute(
-        f"SELECT event_name, COUNT(*) as count FROM events{ev_clause} GROUP BY event_name ORDER BY count DESC LIMIT 10",
+        f"SELECT event_name, COUNT(*) as count FROM events{clause} GROUP BY event_name ORDER BY count DESC LIMIT 50",
         params,
     ).fetchall()
 
