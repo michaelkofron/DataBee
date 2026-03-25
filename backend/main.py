@@ -279,6 +279,70 @@ def hive_count(hive_id: str, site_id: str | None = None):
     return {"hive_id": hive_id, "count": count}
 
 
+class ConditionSearch(BaseModel):
+    conditions: list[dict]
+    site_id: str | None = None
+    limit: int = 30
+
+
+@app.post("/api/journey/search")
+def journey_search(body: ConditionSearch):
+    if not body.conditions:
+        raise HTTPException(400, "At least one condition is required")
+
+    where = ""
+    params: list = []
+    if body.site_id:
+        where = " WHERE site_id = ?"
+        params = [body.site_id]
+
+    events_rows = db().execute(
+        f"""
+        SELECT uuid, session_id, event_name, page_path, timestamp
+        FROM events{where}
+        ORDER BY uuid, timestamp
+        """,
+        params,
+    ).fetchall()
+
+    journeys: dict[str, list[tuple]] = {}
+    for r in events_rows:
+        journeys.setdefault(r[0], []).append(r)
+
+    matching: list[str] = []
+    for uid, evts in journeys.items():
+        if _journey_matches(evts, body.conditions):
+            matching.append(uid)
+            if len(matching) >= body.limit:
+                break
+
+    # Fetch display info for matching UUIDs
+    if not matching:
+        return []
+
+    placeholders = ",".join(["?"] * len(matching))
+    rows = db().execute(
+        f"""
+        SELECT e.uuid, e.site_id, s.site_name,
+               MIN(e.timestamp) as first_seen, MAX(e.timestamp) as last_seen
+        FROM events e
+        JOIN sites s ON s.site_id = e.site_id
+        WHERE e.uuid IN ({placeholders})
+        GROUP BY e.uuid, e.site_id, s.site_name
+        ORDER BY last_seen DESC
+        """,
+        matching,
+    ).fetchall()
+
+    return [
+        {
+            "uuid": r[0], "site_id": r[1], "site_name": r[2],
+            "first_seen": str(r[3]), "last_seen": str(r[4]),
+        }
+        for r in rows
+    ]
+
+
 def _journey_matches(events: list[tuple], conditions: list[dict]) -> bool:
     """Check if a visitor's event sequence matches all hive conditions in order."""
     if not conditions:
