@@ -73,10 +73,10 @@ def stats(
         where.append("site_id = ?")
         params.append(site_id)
     if start:
-        where.append("timestamp >= ?")
+        where.append("timestamp >= ?::TIMESTAMP")
         params.append(start)
     if end:
-        where.append("timestamp < ? + INTERVAL 1 DAY")
+        where.append("timestamp < ?::TIMESTAMP + INTERVAL 1 DAY")
         params.append(end)
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
