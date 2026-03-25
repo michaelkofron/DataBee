@@ -56,7 +56,7 @@ export default function App() {
       <div className="main">
         {view === 'overview' && <Overview siteId={selectedSite} />}
         {view === 'journey' && <JourneyExplorer siteId={selectedSite} />}
-        {view === 'hives' && <Hives siteId={selectedSite} />}
+        {view === 'hives' && <Hives siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? ''} />}
       </div>
     </>
   )

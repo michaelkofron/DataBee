@@ -18,7 +18,7 @@ function placeholderFor(type: HiveConditionType) {
   return 'e.g. /blog'
 }
 
-export default function Hives({ siteId }: { siteId: string }) {
+export default function Hives({ siteId, siteName }: { siteId: string; siteName: string }) {
   const [hives, setHives] = useState<Hive[]>([])
   const [hiveCounts, setHiveCounts] = useState<Record<string, number>>({})
   const [countLoading, setCountLoading] = useState<Record<string, boolean>>({})
@@ -31,15 +31,15 @@ export default function Hives({ siteId }: { siteId: string }) {
   const [saveError, setSaveError] = useState('')
 
   const loadHives = () => {
-    fetch('/api/hives').then(r => r.json()).then(setHives).catch(() => {})
+    const p = new URLSearchParams()
+    if (siteId) p.set('site_id', siteId)
+    fetch(`/api/hives?${p}`).then(r => r.json()).then(setHives).catch(() => {})
   }
-  useEffect(loadHives, [])
+  useEffect(loadHives, [siteId])
 
   const countHive = (id: string) => {
     setCountLoading(prev => ({ ...prev, [id]: true }))
-    const p = new URLSearchParams()
-    if (siteId) p.set('site_id', siteId)
-    fetch(`/api/hives/${id}/count?${p}`)
+    fetch(`/api/hives/${id}/count`)
       .then(r => r.json())
       .then(d => setHiveCounts(prev => ({ ...prev, [id]: d.count })))
       .catch(() => {})
@@ -68,7 +68,7 @@ export default function Hives({ siteId }: { siteId: string }) {
     fetch('/api/hives', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: hiveName.trim(), conditions }),
+      body: JSON.stringify({ name: hiveName.trim(), conditions, site_id: siteId || null }),
     })
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
       .then(h => { setHives(prev => [h, ...prev]); setShowModal(false) })
@@ -91,7 +91,10 @@ export default function Hives({ siteId }: { siteId: string }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700 }}>Hives</h2>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 700 }}>Hives</h2>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{siteName || 'All sites'}</span>
+        </div>
         <button className="btn btn-primary" onClick={openModal}>+ New Hive</button>
       </div>
 

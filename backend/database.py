@@ -47,10 +47,16 @@ def init_db() -> duckdb.DuckDBPyConnection:
         CREATE TABLE IF NOT EXISTS hives (
             id         TEXT PRIMARY KEY,
             name       TEXT NOT NULL,
+            site_id    TEXT,
             conditions TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT current_timestamp,
             updated_at TIMESTAMP DEFAULT current_timestamp
         )
     """)
+
+    # Migrate: add site_id to hives if missing
+    cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'hives'").fetchall()]
+    if 'site_id' not in cols:
+        con.execute("ALTER TABLE hives ADD COLUMN site_id TEXT")
 
     return con

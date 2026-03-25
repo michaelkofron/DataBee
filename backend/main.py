@@ -199,18 +199,25 @@ def get_journey(visitor_uuid: str, site_id: str | None = None):
 class HiveCreate(BaseModel):
     name: str
     conditions: list[dict]
+    site_id: str | None = None
 
 
 @app.get("/api/hives")
-def list_hives():
-    rows = db().execute(
-        "SELECT id, name, conditions, created_at, updated_at FROM hives ORDER BY created_at DESC"
-    ).fetchall()
+def list_hives(site_id: str | None = None):
+    if site_id:
+        rows = db().execute(
+            "SELECT id, name, site_id, conditions, created_at, updated_at FROM hives WHERE site_id = ? ORDER BY created_at DESC",
+            [site_id],
+        ).fetchall()
+    else:
+        rows = db().execute(
+            "SELECT id, name, site_id, conditions, created_at, updated_at FROM hives WHERE site_id IS NULL ORDER BY created_at DESC"
+        ).fetchall()
     return [
         {
-            "id": r[0], "name": r[1],
-            "conditions": json.loads(r[2]),
-            "created_at": str(r[3]), "updated_at": str(r[4]),
+            "id": r[0], "name": r[1], "site_id": r[2],
+            "conditions": json.loads(r[3]),
+            "created_at": str(r[4]), "updated_at": str(r[5]),
         }
         for r in rows
     ]
@@ -226,11 +233,11 @@ def create_hive(body: HiveCreate):
     hive_id = str(_uuid.uuid4())
     now = datetime.now().isoformat()
     db().execute(
-        "INSERT INTO hives (id, name, conditions, created_at, updated_at) VALUES (?,?,?,?,?)",
-        [hive_id, body.name.strip(), json.dumps(body.conditions), now, now],
+        "INSERT INTO hives (id, name, site_id, conditions, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        [hive_id, body.name.strip(), body.site_id or None, json.dumps(body.conditions), now, now],
     )
-    return {"id": hive_id, "name": body.name.strip(), "conditions": body.conditions,
-            "created_at": now, "updated_at": now}
+    return {"id": hive_id, "name": body.name.strip(), "site_id": body.site_id or None,
+            "conditions": body.conditions, "created_at": now, "updated_at": now}
 
 
 @app.delete("/api/hives/{hive_id}")
@@ -243,17 +250,18 @@ def delete_hive(hive_id: str):
 
 
 @app.get("/api/hives/{hive_id}/count")
-def hive_count(hive_id: str, site_id: str | None = None):
-    row = db().execute("SELECT conditions FROM hives WHERE id = ?", [hive_id]).fetchone()
+def hive_count(hive_id: str):
+    row = db().execute("SELECT conditions, site_id FROM hives WHERE id = ?", [hive_id]).fetchone()
     if not row:
         raise HTTPException(404, "Hive not found")
     conditions = json.loads(row[0])
+    hive_site_id = row[1]
 
     where = ""
     params: list = []
-    if site_id:
+    if hive_site_id:
         where = " WHERE site_id = ?"
-        params = [site_id]
+        params = [hive_site_id]
 
     # Get all events grouped by uuid
     events_rows = db().execute(

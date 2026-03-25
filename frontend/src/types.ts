@@ -50,6 +50,7 @@ export interface HiveCondition {
 export interface Hive {
   id: string
   name: string
+  site_id: string | null
   conditions: HiveCondition[]
   created_at: string
   updated_at: string
