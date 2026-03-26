@@ -11,7 +11,7 @@ from database import init_db
 
 load_dotenv(dotenv_path="../.env")
 
-app = FastAPI(title="DataBee")
+app = FastAPI(title="Humblebee")
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +32,7 @@ def db():
 def startup():
     global _db
     _db = init_db()
-    print("DataBee: database initialised.")
+    print("Humblebee: database initialised.")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "==> DataBee install"
+echo "==> Humblebee install"
 
 # ── Python backend ──────────────────────────────────────────────────────────
 echo ""

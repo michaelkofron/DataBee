@@ -25,7 +25,7 @@ export default function App() {
   return (
     <>
       <div className="topbar">
-        <div className="topbar-logo">🐝 DataBee</div>
+        <div className="topbar-logo">🐝 Humblebee</div>
         <div className="topbar-divider" />
 
         <select

@@ -33,7 +33,7 @@ echo "Starting frontend →  http://localhost:5173"
 FRONTEND_PID=$!
 
 echo ""
-echo "DataBee is running. Press Ctrl+C to stop."
+echo "Humblebee is running. Press Ctrl+C to stop."
 echo ""
 
 wait "$BACKEND_PID" "$FRONTEND_PID"

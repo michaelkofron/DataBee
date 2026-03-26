@@ -1,7 +1,7 @@
 import duckdb
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "storage" / "databee.duckdb"
+DB_PATH = Path(__file__).parent.parent / "storage" / "humblebee.duckdb"
 
 
 def init_db() -> duckdb.DuckDBPyConnection:
