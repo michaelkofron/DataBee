@@ -1,4 +1,5 @@
 import json
+import threading
 import uuid as _uuid
 from datetime import datetime, timedelta
 
@@ -7,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from database import init_db
+from database import init_db, DB_PATH
 
 load_dotenv(dotenv_path="../.env")
 
@@ -21,17 +22,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_db = None
+# Each thread gets its own DuckDB connection to avoid concurrency issues.
+_local = threading.local()
 
 
 def db():
-    return _db
+    import duckdb
+    if not getattr(_local, "con", None):
+        _local.con = duckdb.connect(str(DB_PATH))
+    return _local.con
 
 
 @app.on_event("startup")
 def startup():
-    global _db
-    _db = init_db()
+    # Run migrations/table creation once on the main thread.
+    init_db()
     print("Humblebee: database initialised.")
 
 
@@ -118,7 +123,10 @@ def stats(
 def list_uuids(
     site_id: str | None = None,
     q: str | None = None,
-    limit: int = 30,
+    limit: int = 100,
+    offset: int = 0,
+    start: str | None = None,
+    end: str | None = None,
 ):
     where = []
     params: list = []
@@ -129,8 +137,19 @@ def list_uuids(
     if q:
         where.append("e.uuid LIKE ?")
         params.append(f"%{q}%")
+    if start:
+        where.append("e.timestamp >= CAST(? AS TIMESTAMP)")
+        params.append(start)
+    if end:
+        where.append("e.timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        params.append(end)
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    total = db().execute(
+        f"SELECT COUNT(DISTINCT e.uuid) FROM events e{clause}",
+        params,
+    ).fetchone()[0]
 
     rows = db().execute(
         f"""
@@ -141,18 +160,21 @@ def list_uuids(
         {clause}
         GROUP BY e.uuid, e.site_id, s.site_name
         ORDER BY last_seen DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
         """,
-        params + [limit],
+        params + [limit, offset],
     ).fetchall()
 
-    return [
-        {
-            "uuid": r[0], "site_id": r[1], "site_name": r[2],
-            "first_seen": str(r[3]), "last_seen": str(r[4]),
-        }
-        for r in rows
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "uuid": r[0], "site_id": r[1], "site_name": r[2],
+                "first_seen": str(r[3]), "last_seen": str(r[4]),
+            }
+            for r in rows
+        ],
+    }
 
 
 # ── Journey ───────────────────────────────────────────────────────────────────
@@ -267,7 +289,7 @@ def hive_count(hive_id: str):
     # Get all events grouped by uuid
     events_rows = db().execute(
         f"""
-        SELECT uuid, session_id, event_name, page_path, timestamp
+        SELECT uuid, session_id, event_name, page_path, timestamp, properties
         FROM events{where}
         ORDER BY uuid, timestamp
         """,
@@ -281,7 +303,7 @@ def hive_count(hive_id: str):
 
     count = 0
     for uuid, evts in journeys.items():
-        if _journey_matches(evts, conditions):
+        if _journey_matches(_mark_entries(evts), conditions):
             count += 1
 
     return {"hive_id": hive_id, "count": count}
@@ -290,7 +312,10 @@ def hive_count(hive_id: str):
 class ConditionSearch(BaseModel):
     conditions: list[dict]
     site_id: str | None = None
-    limit: int = 30
+    limit: int = 100
+    offset: int = 0
+    start: str | None = None
+    end: str | None = None
 
 
 @app.post("/api/journey/search")
@@ -298,15 +323,23 @@ def journey_search(body: ConditionSearch):
     if not body.conditions:
         raise HTTPException(400, "At least one condition is required")
 
-    where = ""
+    filters = []
     params: list = []
     if body.site_id:
-        where = " WHERE site_id = ?"
-        params = [body.site_id]
+        filters.append("site_id = ?")
+        params.append(body.site_id)
+    if body.start:
+        filters.append("timestamp >= CAST(? AS TIMESTAMP)")
+        params.append(body.start)
+    if body.end:
+        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        params.append(body.end)
+
+    where = (" WHERE " + " AND ".join(filters)) if filters else ""
 
     events_rows = db().execute(
         f"""
-        SELECT uuid, session_id, event_name, page_path, timestamp
+        SELECT uuid, session_id, event_name, page_path, timestamp, properties
         FROM events{where}
         ORDER BY uuid, timestamp
         """,
@@ -319,16 +352,16 @@ def journey_search(body: ConditionSearch):
 
     matching: list[str] = []
     for uid, evts in journeys.items():
-        if _journey_matches(evts, body.conditions):
+        if _journey_matches(_mark_entries(evts), body.conditions):
             matching.append(uid)
-            if len(matching) >= body.limit:
-                break
 
-    # Fetch display info for matching UUIDs
-    if not matching:
-        return []
+    total = len(matching)
+    page = matching[body.offset : body.offset + body.limit]
 
-    placeholders = ",".join(["?"] * len(matching))
+    if not page:
+        return {"total": total, "items": []}
+
+    placeholders = ",".join(["?"] * len(page))
     rows = db().execute(
         f"""
         SELECT e.uuid, e.site_id, s.site_name,
@@ -339,49 +372,106 @@ def journey_search(body: ConditionSearch):
         GROUP BY e.uuid, e.site_id, s.site_name
         ORDER BY last_seen DESC
         """,
-        matching,
+        page,
     ).fetchall()
 
-    return [
-        {
-            "uuid": r[0], "site_id": r[1], "site_name": r[2],
-            "first_seen": str(r[3]), "last_seen": str(r[4]),
-        }
-        for r in rows
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "uuid": r[0], "site_id": r[1], "site_name": r[2],
+                "first_seen": str(r[3]), "last_seen": str(r[4]),
+            }
+            for r in rows
+        ],
+    }
+
+
+def _mark_entries(events: list[tuple]) -> list[tuple]:
+    """Append an is_entry bool (index 6) — True only for the very first page_view of the journey."""
+    first_done = False
+    result = []
+    for ev in events:
+        is_entry = not first_done and ev[2] == "page_view"
+        if is_entry:
+            first_done = True
+        result.append(ev + (is_entry,))
+    return result
 
 
 def _journey_matches(events: list[tuple], conditions: list[dict]) -> bool:
-    """Check if a visitor's event sequence matches all hive conditions in order."""
+    """Check if a visitor's event sequence matches all hive conditions in order.
+    events must be pre-processed by _mark_entries (index 6 = is_entry bool).
+    """
     if not conditions:
         return False
 
-    idx = 0  # current position in the event list
+    idx = 0
     prev_idx = -1
 
     for ci, cond in enumerate(conditions):
-        ctype = cond.get("type", "")
-        value = cond.get("value", "")
+        field    = cond.get("field", "event_name")
+        match    = cond.get("match", "equals")
+        value    = cond.get("value", "")
         sequence = cond.get("sequence", "anytime")
+        negate   = match in ("is_not", "does_not_contain")
+        contains = match in ("contains", "does_not_contain")
 
         start = idx if ci == 0 else (prev_idx + 1)
         found = False
 
         if sequence == "immediately" and ci > 0:
-            # Must be the very next event
             if start < len(events):
-                if _event_matches(events[start], ctype, value):
-                    prev_idx = start
-                    idx = start + 1
-                    found = True
+                prev_session = events[prev_idx][1]
+                candidate = events[start]
+                same_session = candidate[1] == prev_session
+                if same_session and _event_field_applies(candidate, field):
+                    hit = _event_matches(candidate, field, value, contains)
+                    if (not negate and hit) or (negate and not hit):
+                        prev_idx = start
+                        idx = start + 1
+                        found = True
+
+        elif sequence == "next_session" and ci > 0:
+            prev_session = events[prev_idx][1]
+            next_session_id = None
+            next_session_start = None
+            for i in range(prev_idx + 1, len(events)):
+                if events[i][1] != prev_session:
+                    next_session_id = events[i][1]
+                    next_session_start = i
+                    break
+            if next_session_id is not None:
+                last_i = next_session_start
+                for i in range(next_session_start, len(events)):
+                    if events[i][1] != next_session_id:
+                        break
+                    last_i = i
+                    if not _event_field_applies(events[i], field):
+                        continue
+                    hit = _event_matches(events[i], field, value)
+                    if (not negate and hit) or (negate and not hit):
+                        prev_idx = i
+                        idx = i + 1
+                        found = True
+                        break
+
         else:
             # "anytime" — scan forward
             for i in range(start, len(events)):
-                if _event_matches(events[i], ctype, value):
-                    prev_idx = i
-                    idx = i + 1
-                    found = True
-                    break
+                if negate:
+                    # Find first event of the right field type whose value doesn't match
+                    if _event_field_applies(events[i], field) and not _event_matches(events[i], field, value, contains):
+                        prev_idx = i
+                        idx = i + 1
+                        found = True
+                        break
+                else:
+                    if _event_field_applies(events[i], field) and _event_matches(events[i], field, value, contains):
+                        prev_idx = i
+                        idx = i + 1
+                        found = True
+                        break
 
         if not found:
             return False
@@ -389,15 +479,37 @@ def _journey_matches(events: list[tuple], conditions: list[dict]) -> bool:
     return True
 
 
-def _event_matches(event: tuple, ctype: str, value: str) -> bool:
-    """Check if a single event matches a condition. event = (uuid, session_id, event_name, page_path, timestamp)."""
-    event_name = event[2]
+def _event_field_applies(event: tuple, field: str) -> bool:
+    """Returns True if this event is the right type for the given field."""
+    event_name = event[2] or ""
+    is_entry   = event[6] if len(event) > 6 else False
+    if field == "event_name":
+        return event_name != "page_view"
+    elif field in ("page_path", "page_referrer"):
+        return event_name == "page_view"
+    elif field == "entry_page":
+        return bool(is_entry)
+    return False
+
+
+def _event_matches(event: tuple, field: str, value: str, contains: bool = False) -> bool:
+    """Positive match only — check if the event's field value equals (or contains) value.
+    Call _event_field_applies first to confirm the event is the right type.
+    event = (uuid, session_id, event_name, page_path, timestamp, properties, is_entry)
+    """
     page_path = event[3] or ""
 
-    if ctype == "event_name":
-        return event_name == value
-    elif ctype == "page_path_equals":
-        return page_path == value
-    elif ctype == "page_path_contains":
-        return value in page_path
-    return False
+    if field == "event_name":
+        target = event[2] or ""
+    elif field in ("page_path", "entry_page"):
+        target = page_path
+    elif field == "page_referrer":
+        try:
+            props = json.loads(event[5]) if event[5] else {}
+        except (json.JSONDecodeError, TypeError):
+            props = {}
+        target = props.get("referrer", "")
+    else:
+        return False
+
+    return (value in target) if contains else (target == value)

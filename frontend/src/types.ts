@@ -38,11 +38,13 @@ export interface UuidRow {
   last_seen: string
 }
 
-export type HiveConditionType = 'event_name' | 'page_path_equals' | 'page_path_contains'
-export type HiveSequence = 'anytime' | 'immediately'
+export type HiveConditionField = 'event_name' | 'page_path' | 'page_referrer' | 'entry_page'
+export type HiveConditionMatch = 'is' | 'is_not' | 'contains' | 'does_not_contain'
+export type HiveSequence = 'anytime' | 'immediately' | 'next_session'
 
 export interface HiveCondition {
-  type: HiveConditionType
+  field: HiveConditionField
+  match: HiveConditionMatch
   value: string
   sequence: HiveSequence
 }
@@ -56,4 +58,4 @@ export interface Hive {
   updated_at: string
 }
 
-export type View = 'overview' | 'journey' | 'hives'
+export type View = 'overview' | 'colonies'
