@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Journey, JourneyEvent, UuidRow, Hive, HiveCondition, HiveConditionType, HiveSequence } from '../types'
+import type { Journey, JourneyEvent, UuidRow, Hive, HiveCondition, HiveConditionField, HiveConditionMatch, HiveSequence } from '../types'
 
 const PAGE_SIZE = 100
 
-const CONDITION_TYPES: { value: HiveConditionType; label: string }[] = [
-  { value: 'event_name', label: 'Event name' },
-  { value: 'page_path_equals', label: 'Page path equals' },
-  { value: 'page_path_contains', label: 'Page path contains' },
+const CONDITION_FIELDS: { value: HiveConditionField; label: string; placeholder: string }[] = [
+  { value: 'event_name',    label: 'Event name',    placeholder: 'e.g. signup' },
+  { value: 'page_path',     label: 'Page path',     placeholder: 'e.g. /pricing' },
+  { value: 'page_referrer', label: 'Page referrer', placeholder: 'e.g. google.com' },
+]
+
+const MATCH_OPTIONS: { value: HiveConditionMatch; label: string }[] = [
+  { value: 'equals',   label: 'is exactly' },
+  { value: 'contains', label: 'contains' },
 ]
 
 const SEQUENCE_OPTIONS: { value: HiveSequence; label: string }[] = [
-  { value: 'anytime', label: 'any time later' },
+  { value: 'anytime',     label: 'any time later' },
   { value: 'immediately', label: 'immediately followed by' },
 ]
 
-function placeholderFor(type: HiveConditionType) {
-  if (type === 'event_name') return 'e.g. signup'
-  if (type === 'page_path_equals') return 'e.g. /pricing'
-  return 'e.g. /blog'
+function placeholderFor(field: HiveConditionField) {
+  return CONDITION_FIELDS.find(f => f.value === field)?.placeholder ?? ''
 }
 
 function formatTs(ts: string) {
@@ -37,7 +40,7 @@ function groupBySession(events: JourneyEvent[]) {
   return groups
 }
 
-export default function Colonies({ siteId }: { siteId: string }) {
+export default function Colonies({ siteId, startDate, endDate }: { siteId: string; startDate: string; endDate: string }) {
   // UUID search + list
   const [uuids, setUuids] = useState<UuidRow[]>([])
   const [totalUuids, setTotalUuids] = useState(0)
@@ -71,6 +74,8 @@ export default function Colonies({ siteId }: { siteId: string }) {
     const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (siteId) p.set('site_id', siteId)
     if (uuidSearch) p.set('q', uuidSearch)
+    if (startDate) p.set('start', startDate)
+    if (endDate) p.set('end', endDate)
     fetch(`/api/uuids?${p}`)
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -79,12 +84,12 @@ export default function Colonies({ siteId }: { siteId: string }) {
       })
       .catch(() => {})
       .finally(() => setLoadingMore(false))
-  }, [siteId, uuidSearch, filterActive])
+  }, [siteId, uuidSearch, filterActive, startDate, endDate])
 
   useEffect(() => {
     if (filterActive) return
     fetchUuids(0, false)
-  }, [siteId, uuidSearch, filterActive])
+  }, [siteId, uuidSearch, filterActive, startDate, endDate])
 
   // ── Fetch filtered UUIDs ────────────────────────────────────────────────
   const fetchFiltered = useCallback((offset: number, append: boolean) => {
@@ -93,7 +98,7 @@ export default function Colonies({ siteId }: { siteId: string }) {
     fetch('/api/journey/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conditions, site_id: siteId || null, limit: PAGE_SIZE, offset }),
+      body: JSON.stringify({ conditions, site_id: siteId || null, limit: PAGE_SIZE, offset, start: startDate || null, end: endDate || null }),
     })
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -102,7 +107,7 @@ export default function Colonies({ siteId }: { siteId: string }) {
       })
       .catch(() => { if (!append) setUuids([]) })
       .finally(() => { setFilterLoading(false); setLoadingMore(false) })
-  }, [conditions, siteId])
+  }, [conditions, siteId, startDate, endDate])
 
   const applyFilter = useCallback(() => {
     if (conditions.some(c => !c.value.trim())) return
@@ -147,7 +152,7 @@ export default function Colonies({ siteId }: { siteId: string }) {
 
   // Condition actions
   const addCondition = () => {
-    setConditions(prev => [...prev, { type: 'event_name', value: '', sequence: 'anytime' }])
+    setConditions(prev => [...prev, { field: 'event_name', match: 'equals', value: '', sequence: 'anytime' }])
   }
 
   const updateCondition = (i: number, patch: Partial<HiveCondition>) => {
@@ -165,15 +170,15 @@ export default function Colonies({ siteId }: { siteId: string }) {
     setFilterActive(false)
   }
 
-  // Debounced auto-apply: wait 600ms after the user stops typing
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  // Re-run filter when dates change if a filter is already active
+  const prevDates = useRef({ startDate, endDate })
   useEffect(() => {
-    clearTimeout(debounceRef.current)
-    if (conditions.length > 0 && conditions.every(c => c.value.trim())) {
-      debounceRef.current = setTimeout(() => applyFilter(), 600)
+    const prev = prevDates.current
+    prevDates.current = { startDate, endDate }
+    if (filterActive && (prev.startDate !== startDate || prev.endDate !== endDate)) {
+      fetchFiltered(0, false)
     }
-    return () => clearTimeout(debounceRef.current)
-  }, [conditions, siteId])
+  }, [startDate, endDate, filterActive])
 
   // Colony actions
   const countColony = (id: string) => {
@@ -309,17 +314,27 @@ export default function Colonies({ siteId }: { siteId: string }) {
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <select
                     className="select"
-                    value={c.type}
-                    onChange={e => updateCondition(i, { type: e.target.value as HiveConditionType })}
+                    value={c.field}
+                    onChange={e => updateCondition(i, { field: e.target.value as HiveConditionField })}
                     style={{ fontSize: 12 }}
                   >
-                    {CONDITION_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
+                    {CONDITION_FIELDS.map(f => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="select"
+                    value={c.match}
+                    onChange={e => updateCondition(i, { match: e.target.value as HiveConditionMatch })}
+                    style={{ fontSize: 12 }}
+                  >
+                    {MATCH_OPTIONS.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>
                   <input
                     className="input"
-                    placeholder={placeholderFor(c.type)}
+                    placeholder={placeholderFor(c.field)}
                     value={c.value}
                     onChange={e => updateCondition(i, { value: e.target.value })}
                     onKeyDown={e => e.key === 'Enter' && applyFilter()}
@@ -463,7 +478,7 @@ export default function Colonies({ siteId }: { siteId: string }) {
                     </span>
                   )}
                   <span style={{ color: 'var(--text-secondary)' }}>
-                    {CONDITION_TYPES.find(t => t.value === c.type)?.label}
+                    {CONDITION_FIELDS.find(f => f.value === c.field)?.label} {c.match === 'equals' ? 'is exactly' : 'contains'}
                   </span>{' '}
                   <span className="text-mono" style={{ fontWeight: 600 }}>"{c.value}"</span>
                 </div>
@@ -507,7 +522,7 @@ export default function Colonies({ siteId }: { siteId: string }) {
                     </div>
                   )}
                   <span style={{ color: 'var(--text-secondary)' }}>
-                    {CONDITION_TYPES.find(t => t.value === c.type)?.label}
+                    {CONDITION_FIELDS.find(f => f.value === c.field)?.label} {c.match === 'equals' ? 'is exactly' : 'contains'}
                   </span>{' '}
                   <span className="text-mono" style={{ fontWeight: 600 }}>"{c.value}"</span>
                 </div>

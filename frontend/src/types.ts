@@ -38,11 +38,13 @@ export interface UuidRow {
   last_seen: string
 }
 
-export type HiveConditionType = 'event_name' | 'page_path_equals' | 'page_path_contains'
+export type HiveConditionField = 'event_name' | 'page_path' | 'page_referrer'
+export type HiveConditionMatch = 'equals' | 'contains'
 export type HiveSequence = 'anytime' | 'immediately'
 
 export interface HiveCondition {
-  type: HiveConditionType
+  field: HiveConditionField
+  match: HiveConditionMatch
   value: string
   sequence: HiveSequence
 }

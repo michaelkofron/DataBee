@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { OverviewStats } from '../types'
 
-function daysAgoStr(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
-
-export default function Overview({ siteId }: { siteId: string }) {
+export default function Overview({ siteId, startDate, endDate }: { siteId: string; startDate: string; endDate: string }) {
   const [stats, setStats] = useState<OverviewStats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [startDate, setStartDate] = useState(daysAgoStr(30))
-  const [endDate, setEndDate] = useState(daysAgoStr(0))
 
   const load = () => {
     setLoading(true)
@@ -26,20 +18,12 @@ export default function Overview({ siteId }: { siteId: string }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [siteId])
+  useEffect(load, [siteId, startDate, endDate])
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700 }}>Overview</h2>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <span style={{ color: 'var(--text-muted)' }}>–</span>
-          <input type="date" className="input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-          <button className="btn" onClick={load} disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Refresh'}
-          </button>
-        </div>
       </div>
 
       <div className="stat-grid">
