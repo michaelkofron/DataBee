@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import uuid as _uuid
 from datetime import datetime, timedelta
 
@@ -412,6 +413,178 @@ def hive_count(
             count += 1
 
     return {"hive_id": hive_id, "count": count}
+
+
+# ── Shared helper ─────────────────────────────────────────────────────────────
+
+_uuid_set_cache: dict[tuple, tuple[frozenset, float]] = {}
+_UUID_CACHE_TTL = 300  # 5 minutes
+
+
+def _matching_uuids(hive_id: str, start: str | None, end: str | None) -> set[str]:
+    """Return the set of UUIDs matching a hive's steps for the given date range.
+
+    Results are cached per (hive_id, start, end) for up to 5 minutes so that
+    multiple pollination count/overlap requests sharing a colony only pay the
+    computation cost once.
+    """
+    key = (hive_id, start or "", end or "")
+    cached = _uuid_set_cache.get(key)
+    if cached:
+        result, ts = cached
+        if time.time() - ts < _UUID_CACHE_TTL:
+            return set(result)
+
+    row = db().execute("SELECT conditions, site_id FROM hives WHERE id = ?", [hive_id]).fetchone()
+    if not row:
+        return set()
+    steps = json.loads(row[0])
+    hive_site_id = row[1]
+
+    filters: list[str] = []
+    params: list = []
+    if hive_site_id:
+        filters.append("site_id = ?")
+        params.append(hive_site_id)
+    if start:
+        filters.append("timestamp >= CAST(? AS TIMESTAMP)")
+        params.append(start)
+    if end:
+        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        params.append(end)
+
+    where = (" WHERE " + " AND ".join(filters)) if filters else ""
+    site_clause = " AND site_id = ?" if hive_site_id else ""
+    events_rows = db().execute(
+        f"""
+        SELECT uuid, session_id, event_name, page_path, timestamp, properties
+        FROM events
+        WHERE uuid IN (SELECT DISTINCT uuid FROM events{where}){site_clause}
+        ORDER BY uuid, timestamp
+        """,
+        params + ([hive_site_id] if hive_site_id else []),
+    ).fetchall()
+
+    if not events_rows:
+        _uuid_set_cache[key] = (frozenset(), time.time())
+        return set()
+
+    journeys: dict[str, list[tuple]] = {}
+    for r in events_rows:
+        journeys.setdefault(r[0], []).append(r)
+
+    result = frozenset(uid for uid, evts in journeys.items() if _journey_matches(evts, steps))
+    _uuid_set_cache[key] = (result, time.time())
+    return set(result)
+
+
+# ── Pollinations ──────────────────────────────────────────────────────────────
+
+class PollinationCreate(BaseModel):
+    name: str
+    site_id: str | None = None
+    hive_a_id: str
+    hive_b_id: str
+
+
+@app.get("/api/pollinations")
+def list_pollinations(site_id: str | None = None):
+    if site_id:
+        rows = db().execute(
+            "SELECT id, name, site_id, hive_a_id, hive_b_id, created_at FROM pollinations WHERE site_id = ? ORDER BY created_at DESC",
+            [site_id],
+        ).fetchall()
+    else:
+        rows = db().execute(
+            "SELECT id, name, site_id, hive_a_id, hive_b_id, created_at FROM pollinations WHERE site_id IS NULL ORDER BY created_at DESC"
+        ).fetchall()
+    return [
+        {"id": r[0], "name": r[1], "site_id": r[2], "hive_a_id": r[3], "hive_b_id": r[4], "created_at": str(r[5])}
+        for r in rows
+    ]
+
+
+@app.post("/api/pollinations", status_code=201)
+def create_pollination(body: PollinationCreate):
+    if not body.name.strip():
+        raise HTTPException(400, "Name is required")
+    pol_id = str(_uuid.uuid4())
+    now = datetime.now().isoformat()
+    db().execute(
+        "INSERT INTO pollinations (id, name, site_id, hive_a_id, hive_b_id, created_at) VALUES (?,?,?,?,?,?)",
+        [pol_id, body.name.strip(), body.site_id or None, body.hive_a_id, body.hive_b_id, now],
+    )
+    return {"id": pol_id, "name": body.name.strip(), "site_id": body.site_id or None,
+            "hive_a_id": body.hive_a_id, "hive_b_id": body.hive_b_id, "created_at": now}
+
+
+@app.delete("/api/pollinations/{pol_id}")
+def delete_pollination(pol_id: str):
+    row = db().execute("SELECT id FROM pollinations WHERE id = ?", [pol_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Pollination not found")
+    db().execute("DELETE FROM pollinations WHERE id = ?", [pol_id])
+    return {"ok": True}
+
+
+@app.get("/api/pollinations/{pol_id}/count")
+def pollination_count(
+    pol_id: str,
+    start: str | None = None,
+    end: str | None = None,
+):
+    row = db().execute("SELECT hive_a_id, hive_b_id FROM pollinations WHERE id = ?", [pol_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Pollination not found")
+    set_a = _matching_uuids(row[0], start, end)
+    set_b = _matching_uuids(row[1], start, end)
+    overlap = set_a & set_b
+    return {
+        "pol_id": pol_id,
+        "a_count": len(set_a),
+        "b_count": len(set_b),
+        "overlap": len(overlap),
+        "a_only": len(set_a - set_b),
+        "b_only": len(set_b - set_a),
+    }
+
+
+@app.get("/api/pollinations/{pol_id}/overlap-uuids")
+def pollination_overlap_uuids(
+    pol_id: str,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    row = db().execute("SELECT hive_a_id, hive_b_id FROM pollinations WHERE id = ?", [pol_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Pollination not found")
+    set_a = _matching_uuids(row[0], start, end)
+    set_b = _matching_uuids(row[1], start, end)
+    overlap = sorted(set_a & set_b)
+    total = len(overlap)
+    page = overlap[offset: offset + limit]
+    if not page:
+        return {"total": total, "items": []}
+    placeholders = ",".join(["?"] * len(page))
+    rows = db().execute(
+        f"""
+        SELECT e.uuid, e.site_id, s.site_name,
+               MIN(e.timestamp) as first_seen, MAX(e.timestamp) as last_seen,
+               COUNT(DISTINCT e.session_id) as session_count,
+               SUM(CASE WHEN e.event_name = 'page_view' THEN 1 ELSE 0 END)::INTEGER as page_count,
+               MIN(CASE WHEN e.event_name != 'page_view' THEN e.event_name END) as first_custom_event,
+               SUM(CASE WHEN e.event_name != 'page_view' THEN 1 ELSE 0 END)::INTEGER as custom_event_count
+        FROM events e
+        JOIN sites s ON s.site_id = e.site_id
+        WHERE e.uuid IN ({placeholders})
+        GROUP BY e.uuid, e.site_id, s.site_name
+        ORDER BY last_seen DESC
+        """,
+        page,
+    ).fetchall()
+    return {"total": total, "items": [_uuid_row(r) for r in rows]}
 
 
 class ConditionSearch(BaseModel):
