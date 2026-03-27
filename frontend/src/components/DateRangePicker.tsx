@@ -25,12 +25,13 @@ const PRESETS = [
 interface Props {
   startDate: string
   endDate: string
-  onChange: (start: string, end: string) => void
+  onChange: (start: string, end: string, preset: string | null) => void
+  initialActivePreset?: string | null
 }
 
-export default function DateRangePicker({ startDate, endDate, onChange }: Props) {
+export default function DateRangePicker({ startDate, endDate, onChange, initialActivePreset = 'Last 28 days' }: Props) {
   const [open, setOpen] = useState(false)
-  const [activePreset, setActivePreset] = useState<string | null>('Last 28 days')
+  const [activePreset, setActivePreset] = useState<string | null>(initialActivePreset)
   const [draft, setDraft] = useState({ start: startDate, end: endDate })
   const ref = useRef<HTMLDivElement>(null)
 
@@ -46,14 +47,14 @@ export default function DateRangePicker({ startDate, endDate, onChange }: Props)
     const s = preset.start(), e = preset.end()
     setActivePreset(preset.label)
     setDraft({ start: s, end: e })
-    onChange(s, e)
+    onChange(s, e, preset.label)
     setOpen(false)
   }
 
   const applyCustom = () => {
     if (!draft.start || !draft.end || draft.start > draft.end) return
     setActivePreset(null)
-    onChange(draft.start, draft.end)
+    onChange(draft.start, draft.end, null)
     setOpen(false)
   }
 
