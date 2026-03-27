@@ -146,8 +146,10 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
       .finally(() => setCountLoading(prev => ({ ...prev, [id]: false })))
   }, [startDate, endDate])
 
-  // Re-count + refresh open UUID list when dates change (only the expanded card)
+  // Dates changed — invalidate all cached data, re-fetch the open card if any
   useEffect(() => {
+    setCounts({})
+    setOverlapUuids({})
     if (!expandedPol) return
     countPollination(expandedPol)
     fetchOverlapUuids(expandedPol, 0, false)
@@ -177,8 +179,8 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
       setExpandedPol(null)
     } else {
       setExpandedPol(id)
-      countPollination(id)
-      fetchOverlapUuids(id, 0, false)
+      if (!counts[id]) countPollination(id)
+      if (!overlapUuids[id]) fetchOverlapUuids(id, 0, false)
     }
   }
 
@@ -224,8 +226,12 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
         }),
       })
       if (!res.ok) { setSaveError('Failed to save'); return }
+      const newPol: Pollination = await res.json()
+      setPollinations(prev => [newPol, ...prev])
       setFormName(''); setFormHiveA(''); setFormHiveB(''); setShowCreate(false)
-      fetchPollinations()
+      setExpandedPol(newPol.id)
+      countPollination(newPol.id)
+      fetchOverlapUuids(newPol.id, 0, false)
     } catch { setSaveError('Failed to save') }
     finally { setSaving(false) }
   }
