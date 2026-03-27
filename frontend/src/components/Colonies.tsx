@@ -346,7 +346,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate }: {
       setExpandedColony(null)
     } else {
       setExpandedColony(colony.id)
-      fetchColonyUuids(colony, 0, false)
+      if (!colonyUuids[colony.id]) fetchColonyUuids(colony, 0, false)
     }
   }
 
@@ -369,6 +369,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate }: {
     const prev = prevDates.current
     prevDates.current = { startDate, endDate }
     if (prev.startDate === startDate && prev.endDate === endDate) return
+    setColonyUuids({})
     if (filterActive) fetchFiltered(0, false)
     if (colonies.length > 0) countAll(colonies.map(h => h.id), startDate, endDate)
     if (expandedColony) {
