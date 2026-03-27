@@ -28,7 +28,7 @@ export default function App() {
   const tabs: { key: View; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'colonies', label: 'Colonies' },
-    { key: 'pollinate', label: 'Pollinate' },
+    { key: 'pollinate', label: 'Pollinations' },
   ]
 
   return (

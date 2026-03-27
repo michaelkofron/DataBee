@@ -35,40 +35,35 @@ function groupBySession(events: JourneyEvent[]) {
   return groups
 }
 
-function VennDiagram({ a, b, overlap, nameA, nameB }: {
-  a: number; b: number; overlap: number; nameA: string; nameB: string
+function VennDiagram({ a, b, overlap, uid }: {
+  a: number; b: number; overlap: number; uid: string
 }) {
-  const W = 400, H = 180, CY = H / 2
-  const MAX_R = 72, MIN_R = 32
+  const VW = 500, VH = 220, CY = VH / 2
+  const MAX_R = 88, MIN_R = 40
   const maxCount = Math.max(a, b, 1)
   const ra = MIN_R + (MAX_R - MIN_R) * Math.sqrt(a / maxCount)
   const rb = MIN_R + (MAX_R - MIN_R) * Math.sqrt(b / maxCount)
   const overlapRatio = (a > 0 && b > 0) ? Math.min(overlap / Math.min(a, b), 1) : 0
   const dist = Math.max((ra + rb) * (1 - overlapRatio * 0.75), Math.abs(ra - rb) + 2)
-  const cxa = W / 2 - dist / 2
-  const cxb = W / 2 + dist / 2
+  const cxa = VW / 2 - dist / 2
+  const cxb = VW / 2 + dist / 2
+  const clipId = `venn-clip-${uid}`
 
   return (
-    <svg width={W} height={H} style={{ display: 'block', overflow: 'visible' }}>
-      <circle cx={cxa} cy={CY} r={ra} fill="var(--primary)" fillOpacity={0.18} stroke="var(--primary)" strokeWidth={1.5} />
-      <circle cx={cxb} cy={CY} r={rb} fill="var(--primary-dark)" fillOpacity={0.15} stroke="var(--primary-dark)" strokeWidth={1.5} />
-      <text x={cxa - dist * 0.18} y={CY + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
-        {a > 0 ? (a - overlap).toLocaleString() : '–'}
-      </text>
-      {overlap > 0 && (
-        <text x={W / 2} y={CY + 5} textAnchor="middle" fontSize={15} fontWeight={700} fill="var(--text)">
-          {overlap.toLocaleString()}
-        </text>
+    <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <clipPath id={clipId}>
+          <circle cx={cxa} cy={CY} r={ra} />
+        </clipPath>
+      </defs>
+      {/* Circle A */}
+      <circle cx={cxa} cy={CY} r={ra} fill="var(--primary)" fillOpacity={0.15} stroke="var(--primary)" strokeWidth={1.5} />
+      {/* Circle B */}
+      <circle cx={cxb} cy={CY} r={rb} fill="var(--primary-dark)" fillOpacity={0.12} stroke="var(--primary-dark)" strokeWidth={1.5} />
+      {/* Intersection — golden yellow, circle B clipped to circle A */}
+      {overlapRatio > 0 && (
+        <circle cx={cxb} cy={CY} r={rb} fill="#f59e0b" fillOpacity={0.55} stroke="none" clipPath={`url(#${clipId})`} />
       )}
-      <text x={cxb + dist * 0.18} y={CY + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
-        {b > 0 ? (b - overlap).toLocaleString() : '–'}
-      </text>
-      <text x={cxa - ra - 4} y={H - 8} textAnchor="end" fontSize={11} fill="var(--text-muted)">
-        {nameA.length > 20 ? nameA.slice(0, 19) + '…' : nameA}
-      </text>
-      <text x={cxb + rb + 4} y={H - 8} textAnchor="start" fontSize={11} fill="var(--text-muted)">
-        {nameB.length > 20 ? nameB.slice(0, 19) + '…' : nameB}
-      </text>
     </svg>
   )
 }
@@ -101,7 +96,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
-  const title = siteName ? `Pollinate — ${siteName}` : 'Pollinate — All Sites'
+  const title = siteName ? `Pollinations — ${siteName}` : 'Pollinations — All Sites'
 
   // ── Fetch colonies for dropdowns ──────────────────────────────────────────
   useEffect(() => {
@@ -371,34 +366,51 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
                     </div>
                   ) : (
                     <>
-                      {/* Venn diagram — centered, full row */}
-                      <div style={{ padding: '24px 16px 8px', display: 'flex', justifyContent: 'center' }}>
-                        <VennDiagram a={c.a_count} b={c.b_count} overlap={c.overlap} nameA={nameA} nameB={nameB} />
-                      </div>
+                      {/* Venn (left) + stats (right) */}
+                      <div style={{ padding: '20px 16px 16px', display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* Responsive Venn */}
+                        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                          <VennDiagram a={c.a_count} b={c.b_count} overlap={c.overlap} uid={pol.id} />
+                        </div>
 
-                      {/* Stats row */}
-                      <div style={{ padding: '8px 24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                        <div style={{ display: 'flex', gap: 24 }}>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameA}</div>
-                            <div style={{ fontSize: 22, fontWeight: 700 }}>{c.a_count.toLocaleString()}</div>
+                        {/* Stats panel */}
+                        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+                          {/* Colony A */}
+                          <div style={{ padding: '10px 14px', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                              {nameA}
+                            </div>
+                            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{c.a_count.toLocaleString()}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                              {c.a_only.toLocaleString()} only here
+                            </div>
                           </div>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Overlap</div>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)' }}>{c.overlap.toLocaleString()}</div>
+
+                          {/* Overlap */}
+                          <div style={{ padding: '10px 14px', background: '#fffbeb', borderRadius: 'var(--radius-sm)', border: '1px solid #fcd34d' }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                              Overlap
+                            </div>
+                            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: '#d97706' }}>{c.overlap.toLocaleString()}</div>
+                            {(pctA !== null || pctB !== null) && (
+                              <div style={{ fontSize: 11, color: '#92400e', marginTop: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                {pctA !== null && <span>{pctA}% of {nameA}</span>}
+                                {pctB !== null && <span>{pctB}% of {nameB}</span>}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameB}</div>
-                            <div style={{ fontSize: 22, fontWeight: 700 }}>{c.b_count.toLocaleString()}</div>
+
+                          {/* Colony B */}
+                          <div style={{ padding: '10px 14px', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                              {nameB}
+                            </div>
+                            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{c.b_count.toLocaleString()}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                              {c.b_only.toLocaleString()} only here
+                            </div>
                           </div>
                         </div>
-                        {(pctA !== null || pctB !== null) && (
-                          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                            {pctA !== null && <span>{pctA}% of {nameA}</span>}
-                            {pctA !== null && pctB !== null && <span style={{ margin: '0 6px', color: 'var(--border)' }}>·</span>}
-                            {pctB !== null && <span>{pctB}% of {nameB}</span>}
-                          </div>
-                        )}
                       </div>
 
                       {/* Overlap UUID list */}
