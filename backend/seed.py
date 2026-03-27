@@ -18,7 +18,7 @@ random.seed(SEED)
 NOW = datetime.now()
 WINDOW_DAYS = 90
 
-TARGET_UUIDS = 13_000
+TARGET_UUIDS = 240_000
 
 # Archetype weights: (name, weight)
 ARCHETYPES = [
@@ -36,47 +36,110 @@ SITES = [
         "site_name": "The Daily Read",
         "domain": "thedailyread.com",
         "pages": [
-            "/",
-            "/blog/getting-started",
-            "/blog/advanced-tips",
-            "/blog/case-study",
-            "/blog/news",
-            "/about",
-            "/newsletter",
+            "/", "/blog", "/blog/getting-started", "/blog/advanced-tips",
+            "/blog/case-study", "/blog/news", "/blog/opinion", "/blog/interviews",
+            "/about", "/newsletter", "/archive", "/search",
         ],
-        "conversion_events": ["signup", "download", "contact_form"],
-        "extra_events": ["signup", "download", "contact_form"],
+        "conversion_events": ["signup", "newsletter_subscribe"],
+        "extra_events": ["signup", "newsletter_subscribe", "share", "bookmark", "download"],
     },
     {
         "site_name": "ShopNest",
         "domain": "shopnest.com",
         "pages": [
-            "/",
-            "/products",
-            "/products/item-a",
-            "/products/item-b",
-            "/products/item-c",
-            "/cart",
-            "/checkout",
-            "/confirmation",
+            "/", "/products", "/products/item-a", "/products/item-b",
+            "/products/item-c", "/products/item-d", "/products/item-e",
+            "/cart", "/checkout", "/confirmation", "/account", "/wishlist", "/sale",
         ],
-        "conversion_events": ["checkout", "contact_form"],
-        "extra_events": ["add_to_cart", "checkout", "contact_form"],
+        "conversion_events": ["purchase", "add_to_cart"],
+        "extra_events": ["add_to_cart", "remove_from_cart", "purchase", "add_to_wishlist", "apply_coupon"],
     },
     {
         "site_name": "Launchpad",
         "domain": "launchpadapp.com",
         "pages": [
-            "/",
-            "/features",
-            "/pricing",
-            "/blog",
-            "/docs",
-            "/login",
-            "/dashboard",
+            "/", "/features", "/pricing", "/blog", "/docs", "/docs/quickstart",
+            "/docs/api", "/login", "/signup", "/dashboard", "/integrations", "/changelog",
         ],
-        "conversion_events": ["signup", "contact_form"],
-        "extra_events": ["signup", "video_play", "contact_form"],
+        "conversion_events": ["signup", "upgrade"],
+        "extra_events": ["signup", "upgrade", "video_play", "demo_request", "docs_search"],
+    },
+    {
+        "site_name": "Pixel Studio",
+        "domain": "pixelstudio.io",
+        "pages": [
+            "/", "/gallery", "/gallery/brand", "/gallery/web", "/gallery/print",
+            "/services", "/services/branding", "/services/web-design",
+            "/about", "/blog", "/contact", "/portfolio",
+        ],
+        "conversion_events": ["contact_form", "quote_request"],
+        "extra_events": ["contact_form", "quote_request", "portfolio_download", "gallery_view"],
+    },
+    {
+        "site_name": "Wanderlust",
+        "domain": "wanderlustblog.com",
+        "pages": [
+            "/", "/destinations", "/destinations/europe", "/destinations/asia",
+            "/destinations/americas", "/guides", "/guides/packing", "/guides/budget",
+            "/about", "/newsletter", "/travel-tips", "/gear",
+        ],
+        "conversion_events": ["newsletter_subscribe", "affiliate_click"],
+        "extra_events": ["newsletter_subscribe", "affiliate_click", "share", "bookmark", "download"],
+    },
+    {
+        "site_name": "FitTrack",
+        "domain": "fittrackapp.com",
+        "pages": [
+            "/", "/features", "/workouts", "/workouts/strength", "/workouts/cardio",
+            "/workouts/flexibility", "/nutrition", "/pricing", "/blog",
+            "/app/download", "/community", "/challenges",
+        ],
+        "conversion_events": ["signup", "app_download"],
+        "extra_events": ["signup", "app_download", "video_play", "workout_saved", "challenge_joined"],
+    },
+    {
+        "site_name": "Bloom",
+        "domain": "bloomgarden.com",
+        "pages": [
+            "/", "/plants", "/plants/indoor", "/plants/outdoor", "/plants/succulents",
+            "/guides", "/guides/beginners", "/guides/seasonal",
+            "/shop", "/blog", "/about", "/care-calendar",
+        ],
+        "conversion_events": ["purchase", "newsletter_subscribe"],
+        "extra_events": ["purchase", "newsletter_subscribe", "add_to_cart", "care_reminder_set", "share"],
+    },
+    {
+        "site_name": "CodeCraft",
+        "domain": "codecraft.dev",
+        "pages": [
+            "/", "/tools", "/tools/formatter", "/tools/linter", "/tools/diff",
+            "/docs", "/docs/getting-started", "/docs/api-reference",
+            "/pricing", "/blog", "/changelog", "/community",
+        ],
+        "conversion_events": ["signup", "upgrade"],
+        "extra_events": ["signup", "upgrade", "tool_used", "docs_search", "feedback_submitted"],
+    },
+    {
+        "site_name": "Nomad Finance",
+        "domain": "nomadfinance.io",
+        "pages": [
+            "/", "/features", "/pricing", "/security", "/blog",
+            "/blog/investing", "/blog/taxes", "/blog/budgeting",
+            "/about", "/login", "/signup", "/partners",
+        ],
+        "conversion_events": ["signup", "upgrade"],
+        "extra_events": ["signup", "upgrade", "calculator_used", "report_downloaded", "demo_request"],
+    },
+    {
+        "site_name": "MindSpace",
+        "domain": "mindspaceapp.com",
+        "pages": [
+            "/", "/features", "/programs", "/programs/anxiety", "/programs/sleep",
+            "/programs/focus", "/pricing", "/blog", "/blog/meditation",
+            "/blog/stress", "/about", "/app/download",
+        ],
+        "conversion_events": ["signup", "app_download"],
+        "extra_events": ["signup", "app_download", "video_play", "program_started", "share"],
     },
 ]
 
@@ -91,23 +154,11 @@ def _props_page_view(is_first: bool) -> str | None:
             return json.dumps({"referrer": ref})
     return None
 
-def _props_for_event(event_name: str) -> str | None:
-    if event_name == "checkout":
-        value = round(random.uniform(9.99, 299.99), 2)
-        return json.dumps({"value": str(value), "currency": "USD"})
-    if event_name == "signup":
-        plan = random.choices(["free", "pro"], weights=[0.75, 0.25])[0]
-        return json.dumps({"plan": plan})
-    if event_name == "video_play":
-        return json.dumps({"video_id": "intro-video"})
-    return None
-
 # ── Session builder ───────────────────────────────────────────────────────────
 
 def _make_session(site: dict, archetype: str, session_start: datetime) -> list[dict]:
     """Return a list of event dicts for one session."""
     pages = site["pages"]
-    extra = site["extra_events"]
     events: list[dict] = []
     t = session_start
     session_id = str(uuid.uuid4())
@@ -135,7 +186,6 @@ def _make_session(site: dict, archetype: str, session_start: datetime) -> list[d
             events.append(_ev("page_view", page, _props_page_view(i == 0)))
 
     elif archetype == "deep_reader":
-        # 6-10 page views, with repeats allowed
         n_pages = random.randint(6, 10)
         for i in range(n_pages):
             page = random.choice(pages)
@@ -147,25 +197,24 @@ def _make_session(site: dict, archetype: str, session_start: datetime) -> list[d
         for i, page in enumerate(visited):
             events.append(_ev("page_view", page, _props_page_view(i == 0)))
         conv = random.choice(site["conversion_events"])
-        events.append(_ev(conv, visited[-1], _props_for_event(conv)))
+        events.append(_ev(conv, visited[-1], None))
 
     elif archetype == "returner":
-        # Single session slice for a returner — caller handles multiple sessions
         n_pages = random.randint(2, 4)
         visited = random.sample(pages, min(n_pages, len(pages)))
         for i, page in enumerate(visited):
             events.append(_ev("page_view", page, _props_page_view(i == 0)))
-        # Maybe convert on this visit
         if random.random() < 0.35:
             conv = random.choice(site["conversion_events"])
-            events.append(_ev(conv, visited[-1], _props_for_event(conv)))
+            events.append(_ev(conv, visited[-1], None))
 
-    # Occasionally sprinkle an extra non-conversion event mid-session
+    # Occasionally sprinkle an extra non-conversion action mid-session
     if archetype in ("browser", "deep_reader") and random.random() < 0.15:
+        extra = site["extra_events"]
         ev_name = random.choice(extra)
-        if ev_name not in ("checkout", "signup"):  # keep those for converters
+        if ev_name not in site["conversion_events"]:
             page = random.choice(pages)
-            events.append(_ev(ev_name, page, _props_for_event(ev_name)))
+            events.append(_ev(ev_name, page, None))
 
     return events
 
@@ -190,7 +239,6 @@ def _build_journey(site: dict, archetype: str) -> list[dict]:
 
     for _ in range(n_sessions):
         session_events = _make_session(site, "returner", session_start)
-        # Deduplicate session_id collisions (extremely unlikely but safe)
         sid = session_events[0]["session_id"]
         while sid in session_ids_used:
             new_sid = str(uuid.uuid4())
@@ -199,7 +247,6 @@ def _build_journey(site: dict, archetype: str) -> list[dict]:
             sid = new_sid
         session_ids_used.add(sid)
         all_events.extend(session_events)
-        # Gap of 1-14 days between sessions
         session_start += timedelta(days=random.randint(1, 14))
         if session_start > NOW:
             break
@@ -214,6 +261,7 @@ def seed():
     print("Clearing existing data...")
     con.execute("DELETE FROM events")
     con.execute("DELETE FROM sites")
+    con.execute("DELETE FROM hives")
     print("  done.")
 
     # ── Insert sites ──────────────────────────────────────────────────────────
@@ -237,9 +285,8 @@ def seed():
     print(f"Sites created: {len(site_rows)}")
 
     # ── Distribute UUIDs across sites ─────────────────────────────────────────
-    # Rough split: blog 35%, shop 35%, saas 30%
-    site_weights = [0.35, 0.35, 0.30]
-    archetype_names  = [a[0] for a in ARCHETYPES]
+    site_weights = [0.15, 0.12, 0.12, 0.08, 0.10, 0.10, 0.08, 0.10, 0.08, 0.07]
+    archetype_names   = [a[0] for a in ARCHETYPES]
     archetype_weights = [a[1] for a in ARCHETYPES]
 
     total_events = 0
@@ -258,10 +305,10 @@ def seed():
     print(f"Generating {TARGET_UUIDS:,} UUIDs...")
 
     for i in range(TARGET_UUIDS):
-        site       = random.choices(SITES, weights=site_weights)[0]
-        archetype  = random.choices(archetype_names, weights=archetype_weights)[0]
-        user_uuid  = str(uuid.uuid4())
-        journey    = _build_journey(site, archetype)
+        site      = random.choices(SITES, weights=site_weights)[0]
+        archetype = random.choices(archetype_names, weights=archetype_weights)[0]
+        user_uuid = str(uuid.uuid4())
+        journey   = _build_journey(site, archetype)
 
         seen_sessions: set[str] = set()
         for ev in journey:
