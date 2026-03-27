@@ -18,7 +18,7 @@ random.seed(SEED)
 NOW = datetime.now()
 WINDOW_DAYS = 90
 
-TARGET_UUIDS = 240_000
+TARGET_UUIDS = 15_000
 
 # Archetype weights: (name, weight)
 ARCHETYPES = [
