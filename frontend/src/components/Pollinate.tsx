@@ -1,15 +1,45 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { Hive, Pollination, PollinationCount } from '../types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Hive, Journey, JourneyEvent, Pollination, PollinationCount, UuidRow } from '../types'
+
+const PAGE_SIZE = 100
 
 function formatTs(ts: string) {
   return new Date(ts).toLocaleString()
 }
 
+function uuidSubline(u: UuidRow) {
+  const events = u.first_custom_event
+    ? u.custom_event_count > 1
+      ? `${u.first_custom_event} +${u.custom_event_count - 1} more`
+      : u.first_custom_event
+    : null
+  return [
+    u.site_name,
+    `Active ${formatTs(u.last_seen)}`,
+    `${u.page_count} page${u.page_count !== 1 ? 's' : ''}`,
+    `${u.session_count} session${u.session_count !== 1 ? 's' : ''}`,
+    events,
+  ].filter(Boolean).join(' · ')
+}
+
+function groupBySession(events: JourneyEvent[]) {
+  const groups: { session_id: string; events: JourneyEvent[] }[] = []
+  let current: typeof groups[number] | null = null
+  for (const e of events) {
+    if (!current || current.session_id !== e.session_id) {
+      current = { session_id: e.session_id, events: [] }
+      groups.push(current)
+    }
+    current.events.push(e)
+  }
+  return groups
+}
+
 function VennDiagram({ a, b, overlap, nameA, nameB }: {
   a: number; b: number; overlap: number; nameA: string; nameB: string
 }) {
-  const W = 220, H = 110, CY = H / 2
-  const MAX_R = 44, MIN_R = 20
+  const W = 400, H = 180, CY = H / 2
+  const MAX_R = 72, MIN_R = 32
   const maxCount = Math.max(a, b, 1)
   const ra = MIN_R + (MAX_R - MIN_R) * Math.sqrt(a / maxCount)
   const rb = MIN_R + (MAX_R - MIN_R) * Math.sqrt(b / maxCount)
@@ -22,26 +52,22 @@ function VennDiagram({ a, b, overlap, nameA, nameB }: {
     <svg width={W} height={H} style={{ display: 'block', overflow: 'visible' }}>
       <circle cx={cxa} cy={CY} r={ra} fill="var(--primary)" fillOpacity={0.18} stroke="var(--primary)" strokeWidth={1.5} />
       <circle cx={cxb} cy={CY} r={rb} fill="var(--primary-dark)" fillOpacity={0.15} stroke="var(--primary-dark)" strokeWidth={1.5} />
-      {/* A only count */}
-      <text x={cxa - dist * 0.18} y={CY + 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--text-secondary)">
+      <text x={cxa - dist * 0.18} y={CY + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
         {a > 0 ? (a - overlap).toLocaleString() : '–'}
       </text>
-      {/* Overlap count */}
       {overlap > 0 && (
-        <text x={W / 2} y={CY + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--text)">
+        <text x={W / 2} y={CY + 5} textAnchor="middle" fontSize={15} fontWeight={700} fill="var(--text)">
           {overlap.toLocaleString()}
         </text>
       )}
-      {/* B only count */}
-      <text x={cxb + dist * 0.18} y={CY + 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--text-secondary)">
+      <text x={cxb + dist * 0.18} y={CY + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
         {b > 0 ? (b - overlap).toLocaleString() : '–'}
       </text>
-      {/* Labels */}
-      <text x={cxa - ra - 4} y={H - 6} textAnchor="end" fontSize={10} fill="var(--text-muted)" style={{ maxWidth: 60 }}>
-        {nameA.length > 14 ? nameA.slice(0, 13) + '…' : nameA}
+      <text x={cxa - ra - 4} y={H - 8} textAnchor="end" fontSize={11} fill="var(--text-muted)">
+        {nameA.length > 20 ? nameA.slice(0, 19) + '…' : nameA}
       </text>
-      <text x={cxb + rb + 4} y={H - 6} textAnchor="start" fontSize={10} fill="var(--text-muted)">
-        {nameB.length > 14 ? nameB.slice(0, 13) + '…' : nameB}
+      <text x={cxb + rb + 4} y={H - 8} textAnchor="start" fontSize={11} fill="var(--text-muted)">
+        {nameB.length > 20 ? nameB.slice(0, 19) + '…' : nameB}
       </text>
     </svg>
   )
@@ -55,6 +81,19 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
   const [countLoading, setCountLoading] = useState<Record<string, boolean>>({})
   const [colonies, setColonies] = useState<Hive[]>([])
 
+  // Collapsible cards + overlap UUIDs
+  const [expandedPol, setExpandedPol] = useState<string | null>(null)
+  const [overlapUuids, setOverlapUuids] = useState<Record<string, UuidRow[]>>({})
+  const [overlapUuidLoading, setOverlapUuidLoading] = useState<Record<string, boolean>>({})
+  const [overlapLoadingMore, setOverlapLoadingMore] = useState(false)
+  const overlapListRef = useRef<HTMLDivElement>(null)
+
+  // Journey modal
+  const [journey, setJourney] = useState<Journey | null>(null)
+  const [journeyLoading, setJourneyLoading] = useState(false)
+  const [journeyError, setJourneyError] = useState('')
+
+  // Create form
   const [showCreate, setShowCreate] = useState(false)
   const [formName, setFormName] = useState('')
   const [formHiveA, setFormHiveA] = useState('')
@@ -107,6 +146,66 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
     pollinations.forEach(p => countPollination(p.id))
   }, [pollinations, countPollination])
 
+  // Re-count + refresh open UUID list when dates change
+  useEffect(() => {
+    if (pollinations.length === 0) return
+    pollinations.forEach(p => countPollination(p.id))
+    if (expandedPol) fetchOverlapUuids(expandedPol, 0, false)
+  }, [startDate, endDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Overlap UUID fetch ────────────────────────────────────────────────────
+  const fetchOverlapUuids = useCallback((id: string, offset: number, append: boolean) => {
+    if (append) setOverlapLoadingMore(true)
+    else setOverlapUuidLoading(prev => ({ ...prev, [id]: true }))
+    const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+    if (startDate) p.set('start', startDate)
+    if (endDate) p.set('end', endDate)
+    fetch(`/api/pollinations/${id}/overlap-uuids?${p}`)
+      .then(r => r.json())
+      .then((data: { total: number; items: UuidRow[] }) => {
+        setOverlapUuids(prev => ({ ...prev, [id]: append ? [...(prev[id] ?? []), ...data.items] : data.items }))
+      })
+      .catch(() => {})
+      .finally(() => {
+        setOverlapUuidLoading(prev => ({ ...prev, [id]: false }))
+        setOverlapLoadingMore(false)
+      })
+  }, [startDate, endDate])
+
+  const togglePol = (id: string) => {
+    if (expandedPol === id) {
+      setExpandedPol(null)
+    } else {
+      setExpandedPol(id)
+      fetchOverlapUuids(id, 0, false)
+    }
+  }
+
+  // ── Infinite scroll for overlap UUIDs ────────────────────────────────────
+  const handleOverlapScroll = useCallback(() => {
+    const el = overlapListRef.current
+    if (!el || overlapLoadingMore || !expandedPol) return
+    const list = overlapUuids[expandedPol] ?? []
+    const count = counts[expandedPol]
+    const total = count?.overlap ?? 0
+    if (list.length >= total) return
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+      fetchOverlapUuids(expandedPol, list.length, true)
+    }
+  }, [overlapLoadingMore, expandedPol, overlapUuids, counts, fetchOverlapUuids])
+
+  // ── Journey ───────────────────────────────────────────────────────────────
+  const loadJourney = (uuid: string) => {
+    setJourneyLoading(true)
+    setJourneyError('')
+    const p = new URLSearchParams()
+    if (siteId) p.set('site_id', siteId)
+    fetch(`/api/journey/${uuid}?${p}`)
+      .then(r => r.json())
+      .then(j => { setJourney(j); setJourneyLoading(false) })
+      .catch(() => { setJourneyError('Failed to load journey'); setJourneyLoading(false) })
+  }
+
   // ── Save ──────────────────────────────────────────────────────────────────
   const save = async () => {
     if (!formName.trim() || !formHiveA || !formHiveB) return
@@ -134,11 +233,13 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
     await fetch(`/api/pollinations/${id}`, { method: 'DELETE' })
     setPollinations(prev => prev.filter(p => p.id !== id))
     setCounts(prev => { const n = { ...prev }; delete n[id]; return n })
+    if (expandedPol === id) setExpandedPol(null)
   }
 
   const colonyName = (id: string) => colonies.find(c => c.id === id)?.name ?? id
-
   const canSave = formName.trim() && formHiveA && formHiveB && formHiveA !== formHiveB
+
+  const sessions = journey ? groupBySession(journey.events) : []
 
   return (
     <div>
@@ -200,74 +301,219 @@ export default function Pollinate({ siteId, siteName, startDate, endDate }: {
         </div>
       )}
 
-      {/* Saved pollinations */}
+      {/* Empty state */}
       {pollinations.length === 0 && !showCreate && (
         <div style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 40, textAlign: 'center' }}>
           No cross-pollinations yet — pick two colonies to compare.
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Pollination cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {pollinations.map(pol => {
           const c = counts[pol.id]
           const loading = countLoading[pol.id]
           const nameA = colonyName(pol.hive_a_id)
           const nameB = colonyName(pol.hive_b_id)
+          const isOpen = expandedPol === pol.id
+          const uuidList = overlapUuids[pol.id] ?? []
+          const uuidLoading = overlapUuidLoading[pol.id] ?? false
           const pctA = c && c.a_count > 0 ? Math.round((c.overlap / c.a_count) * 100) : null
           const pctB = c && c.b_count > 0 ? Math.round((c.overlap / c.b_count) * 100) : null
 
           return (
-            <div key={pol.id} className="card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{pol.name}</div>
+            <div key={pol.id} className="card" style={{ overflow: 'hidden' }}>
+              {/* Collapsed header — always visible */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => togglePol(pol.id)}
+              >
+                <div style={{
+                  width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 4, flexShrink: 0, fontSize: 10,
+                  background: isOpen ? 'var(--primary-light)' : '#f1f5f9',
+                  color: isOpen ? 'var(--primary)' : 'var(--text-muted)',
+                }}>
+                  {uuidLoading ? '…' : isOpen ? '▼' : '▶'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{pol.name}</span>
+                    {c && (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {loading
+                          ? <span className="spinner" style={{ width: 12, height: 12, display: 'inline-block' }} />
+                          : `${c.overlap.toLocaleString()} in common`}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                     {nameA} vs {nameB} · saved {formatTs(pol.created_at)}
                   </div>
                 </div>
-                <button
-                  className="btn btn-danger"
-                  onClick={() => deletePollination(pol.id)}
-                  style={{ fontSize: 12, padding: '4px 10px' }}
-                >
-                  Delete
-                </button>
+                <div style={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => deletePollination(pol.id)}
+                    style={{ fontSize: 12, padding: '4px 10px' }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
-              {loading || !c ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '16px 0' }}>Counting…</div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                  <VennDiagram a={c.a_count} b={c.b_count} overlap={c.overlap} nameA={nameA} nameB={nameB} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameA}</div>
-                        <div style={{ fontSize: 20, fontWeight: 700 }}>{c.a_count.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameB}</div>
-                        <div style={{ fontSize: 20, fontWeight: 700 }}>{c.b_count.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Overlap</div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)' }}>{c.overlap.toLocaleString()}</div>
-                      </div>
+              {/* Expanded content */}
+              {isOpen && (
+                <div style={{ borderTop: '1px solid var(--border)' }}>
+                  {loading || !c ? (
+                    <div style={{ padding: 32, textAlign: 'center' }}>
+                      <span className="spinner" style={{ width: 20, height: 20 }} />
                     </div>
-                    {(pctA !== null || pctB !== null) && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                        {pctA !== null && <span>{pctA}% of {nameA}</span>}
-                        {pctA !== null && pctB !== null && <span style={{ margin: '0 6px', color: 'var(--border)' }}>·</span>}
-                        {pctB !== null && <span>{pctB}% of {nameB}</span>}
+                  ) : (
+                    <>
+                      {/* Venn diagram — centered, full row */}
+                      <div style={{ padding: '24px 16px 8px', display: 'flex', justifyContent: 'center' }}>
+                        <VennDiagram a={c.a_count} b={c.b_count} overlap={c.overlap} nameA={nameA} nameB={nameB} />
                       </div>
-                    )}
-                  </div>
+
+                      {/* Stats row */}
+                      <div style={{ padding: '8px 24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 24 }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameA}</div>
+                            <div style={{ fontSize: 22, fontWeight: 700 }}>{c.a_count.toLocaleString()}</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Overlap</div>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)' }}>{c.overlap.toLocaleString()}</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{nameB}</div>
+                            <div style={{ fontSize: 22, fontWeight: 700 }}>{c.b_count.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        {(pctA !== null || pctB !== null) && (
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {pctA !== null && <span>{pctA}% of {nameA}</span>}
+                            {pctA !== null && pctB !== null && <span style={{ margin: '0 6px', color: 'var(--border)' }}>·</span>}
+                            {pctB !== null && <span>{pctB}% of {nameB}</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Overlap UUID list */}
+                      {c.overlap > 0 && (
+                        <div style={{ borderTop: '1px solid var(--border)' }}>
+                          <div style={{ padding: '8px 16px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {c.overlap.toLocaleString()} overlapping visitor{c.overlap !== 1 ? 's' : ''}
+                          </div>
+                          {uuidLoading ? (
+                            <div style={{ padding: 20, textAlign: 'center' }}>
+                              <span className="spinner" style={{ width: 16, height: 16 }} />
+                            </div>
+                          ) : (
+                            <div ref={overlapListRef} onScroll={handleOverlapScroll} style={{ maxHeight: 360, overflowY: 'auto' }}>
+                              {uuidList.map(u => (
+                                <div
+                                  key={u.uuid + u.site_id}
+                                  className={`uuid-list-item${journey?.uuid === u.uuid ? ' active' : ''}`}
+                                  onClick={() => loadJourney(u.uuid)}
+                                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                >
+                                  <div>
+                                    <div className="text-mono" style={{ fontSize: 12 }}>{u.uuid}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{uuidSubline(u)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                              {overlapLoadingMore && (
+                                <div style={{ padding: 12, textAlign: 'center' }}>
+                                  <span className="spinner" style={{ width: 16, height: 16 }} />
+                                </div>
+                              )}
+                              {uuidList.length === 0 && !uuidLoading && (
+                                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No visitors</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
           )
         })}
       </div>
+
+      {/* Journey modal */}
+      {(journey || journeyLoading) && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && !journeyLoading) setJourney(null) }}>
+          <div className="modal" style={{ maxWidth: 700 }}>
+            {journeyLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <span className="spinner" />
+              </div>
+            ) : journeyError ? (
+              <>
+                <div style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{journeyError}</div>
+                <button className="btn" onClick={() => { setJourney(null); setJourneyError('') }}>Close</button>
+              </>
+            ) : journey && journey.events.length > 0 ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <span className="text-mono" style={{ fontSize: 13 }}>{journey.uuid}</span>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 13 }}>{journey.events.length} events</span>
+                  </div>
+                  <button className="btn btn-ghost" onClick={() => setJourney(null)} style={{ padding: '4px 10px' }}>✕</button>
+                </div>
+                <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {sessions.map((s, si) => (
+                    <div key={s.session_id}>
+                      <div className="session-divider">Session {si + 1} · {formatTs(s.events[0].timestamp)}</div>
+                      {s.events.map(ev => (
+                        <div className="event-row" key={ev.event_id}>
+                          <div
+                            className="event-dot"
+                            style={{ background: ev.event_name === 'page_view' ? 'var(--border)' : 'var(--primary)' }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {ev.event_name === 'page_view' ? (
+                                <span className="text-mono" style={{ color: 'var(--text-secondary)' }}>
+                                  {ev.page_path}
+                                </span>
+                              ) : (
+                                <span className="badge-amber">{ev.event_name}</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {formatTs(ev.timestamp)}
+                              {ev.site_name && <> · {ev.site_name}</>}
+                              {ev.properties && (
+                                <span style={{ marginLeft: 8, fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>
+                                  {JSON.stringify(ev.properties)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>No events found</div>
+                <button className="btn" onClick={() => setJourney(null)}>Close</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

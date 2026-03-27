@@ -529,6 +529,44 @@ def pollination_count(
     }
 
 
+@app.get("/api/pollinations/{pol_id}/overlap-uuids")
+def pollination_overlap_uuids(
+    pol_id: str,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    row = db().execute("SELECT hive_a_id, hive_b_id FROM pollinations WHERE id = ?", [pol_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Pollination not found")
+    set_a = _matching_uuids(row[0], start, end)
+    set_b = _matching_uuids(row[1], start, end)
+    overlap = sorted(set_a & set_b)
+    total = len(overlap)
+    page = overlap[offset: offset + limit]
+    if not page:
+        return {"total": total, "items": []}
+    placeholders = ",".join(["?"] * len(page))
+    rows = db().execute(
+        f"""
+        SELECT e.uuid, e.site_id, s.site_name,
+               MIN(e.timestamp) as first_seen, MAX(e.timestamp) as last_seen,
+               COUNT(DISTINCT e.session_id) as session_count,
+               SUM(CASE WHEN e.event_name = 'page_view' THEN 1 ELSE 0 END)::INTEGER as page_count,
+               MIN(CASE WHEN e.event_name != 'page_view' THEN e.event_name END) as first_custom_event,
+               SUM(CASE WHEN e.event_name != 'page_view' THEN 1 ELSE 0 END)::INTEGER as custom_event_count
+        FROM events e
+        JOIN sites s ON s.site_id = e.site_id
+        WHERE e.uuid IN ({placeholders})
+        GROUP BY e.uuid, e.site_id, s.site_name
+        ORDER BY last_seen DESC
+        """,
+        page,
+    ).fetchall()
+    return {"total": total, "items": [_uuid_row(r) for r in rows]}
+
+
 class ConditionSearch(BaseModel):
     steps: list[dict]
     site_id: str | None = None
