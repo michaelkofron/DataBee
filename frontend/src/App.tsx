@@ -69,9 +69,15 @@ export default function App() {
       </div>
 
       <div className="main">
-        {view === 'overview' && <Overview siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />}
-        {view === 'colonies' && <Colonies siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />}
-        {view === 'pollinate' && <Pollinate siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />}
+        <div style={{ display: view === 'overview' ? undefined : 'none' }}>
+          <Overview siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />
+        </div>
+        <div style={{ display: view === 'colonies' ? undefined : 'none' }}>
+          <Colonies siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />
+        </div>
+        <div style={{ display: view === 'pollinate' ? undefined : 'none' }}>
+          <Pollinate siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} />
+        </div>
       </div>
     </>
   )
