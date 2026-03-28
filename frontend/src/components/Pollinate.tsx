@@ -110,7 +110,6 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   const [journeyError, setJourneyError] = useState('')
 
   // Create form
-  const [showCreate, setShowCreate] = useState(false)
   const [formName, setFormName] = useState('')
   const [colonySearch, setColonySearch] = useState('')
   const [selectedA, setSelectedA] = useState<string | null>(null)
@@ -284,7 +283,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
       if (!res.ok) { setSaveError('Failed to save'); return }
       const newPol: Pollination = await res.json()
       setPollinations(prev => [newPol, ...prev])
-      setFormName(''); setSelectedA(null); setSelectedB(null); setColonySearch(''); setPreviewCount(null); setShowCreate(false)
+      setFormName(''); setSelectedA(null); setSelectedB(null); setColonySearch(''); setPreviewCount(null)
       setExpandedPol(newPol.id)
       countPollination(newPol.id)
       fetchOverlapUuids(newPol.id, 0, false)
@@ -308,23 +307,14 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
     <div>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h2>
-          <button
-            className="btn btn-primary"
-            onClick={() => { setShowCreate(s => !s); setSaveError('') }}
-            style={{ padding: '6px 14px', fontSize: 13 }}
-          >
-            Cross-pollinate +
-          </button>
-        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h2>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6}}>
           Pollinations compare two colonies to reveal how much their audiences overlap. Pick any two saved colonies to see shared visitors, unique counts, and percentages.
         </p>
       </div>
 
-      {/* Creator */}
-      {showCreate && (
+      {/* Creator — always visible */}
+      {(
         <div className="card" style={{ marginBottom: 20, overflow: 'hidden' }}>
           {/* Live Venn preview — shown as soon as both colonies are selected */}
           {selectedA && selectedB && (
@@ -380,7 +370,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
             />
             <button
               className="btn btn-ghost"
-              onClick={() => { setShowCreate(false); setSelectedA(null); setSelectedB(null); setColonySearch(''); setFormName(''); setSaveError('') }}
+              onClick={() => { setSelectedA(null); setSelectedB(null); setColonySearch(''); setFormName(''); setSaveError('') }}
               style={{ fontSize: 13, padding: '4px 8px', flexShrink: 0 }}
             >✕</button>
           </div>
@@ -457,7 +447,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
       {/* Saved pollinations header + empty state */}
       <div style={{ marginTop: 8 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>🌼 Saved Pollinations</h3>
-        {pollinations.length === 0 && !showCreate && (
+        {pollinations.length === 0 && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
             🌼 No pollinations saved yet. Cross-pollinate two colonies to compare their audiences.
           </div>
