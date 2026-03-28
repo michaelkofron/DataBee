@@ -44,7 +44,10 @@ function VennDiagram({ a, b, overlap, nameA, nameB, uid }: {
   const ra = MIN_R + (MAX_R - MIN_R) * Math.sqrt(a / maxCount)
   const rb = MIN_R + (MAX_R - MIN_R) * Math.sqrt(b / maxCount)
   const overlapRatio = (a > 0 && b > 0) ? Math.min(overlap / Math.min(a, b), 1) : 0
-  const dist = Math.max((ra + rb) * (1 - overlapRatio * 0.75), Math.abs(ra - rb) + 2)
+  const rMin = Math.min(ra, rb), rMax = Math.max(ra, rb)
+  const dist = overlapRatio >= 1
+    ? Math.max(rMax - rMin - 10, 0)
+    : (rMin + rMax) - overlapRatio * (rMin + rMax - (rMax - rMin))
   const cxa = VW / 2 - dist / 2
   const cxb = VW / 2 + dist / 2
   const clipId = `venn-clip-${uid}`
