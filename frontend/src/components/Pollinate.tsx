@@ -51,7 +51,8 @@ function VennDiagram({ a, b, overlap, nameA, nameB, uid }: {
   const cxa = VW / 2 - dist / 2
   const cxb = VW / 2 + dist / 2
   const clipId = `venn-clip-${uid}`
-  const labelY = CY + MAX_R + 22
+  const labelYA = CY + ra + 18
+  const labelYB = CY + rb + 18
   const truncate = (s: string, n: number) => s.length > n ? s.slice(0, n - 1) + '…' : s
 
   return (
@@ -70,10 +71,10 @@ function VennDiagram({ a, b, overlap, nameA, nameB, uid }: {
         <circle cx={cxb} cy={CY} r={rb} fill="#f59e0b" fillOpacity={0.55} stroke="none" clipPath={`url(#${clipId})`} />
       )}
       {/* Colony name labels */}
-      <text x={cxa} y={labelY} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
+      <text x={cxa} y={labelYA} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
         {truncate(nameA, 20)}
       </text>
-      <text x={cxb} y={labelY} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
+      <text x={cxb} y={labelYB} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--text-secondary)">
         {truncate(nameB, 20)}
       </text>
     </svg>
