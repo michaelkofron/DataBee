@@ -23,6 +23,8 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
 
   const title = siteName ? `Overview — ${siteName}` : 'Overview — All Sites'
 
+  const abortRef = useRef<AbortController | null>(null)
+
   function buildParams(extra?: Record<string, string>) {
     const p = new URLSearchParams()
     if (siteId) p.set('site_id', siteId)
@@ -32,16 +34,9 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
     return p
   }
 
-  const fetchStats = useCallback(() => {
-    fetch(`/api/stats?${buildParams()}`)
-      .then(r => r.json())
-      .then(setStats)
-      .catch(() => {})
-  }, [siteId, startDate, endDate])
-
-  const fetchPages = useCallback((offset: number, append: boolean) => {
+  const fetchPages = useCallback((offset: number, append: boolean, signal?: AbortSignal) => {
     if (append) setPagesLoadingMore(true)
-    fetch(`/api/pages?${buildParams({ limit: String(PAGE_SIZE), offset: String(offset) })}`)
+    fetch(`/api/pages?${buildParams({ limit: String(PAGE_SIZE), offset: String(offset) })}`, { signal })
       .then(r => r.json())
       .then((data: { total: number; items: { page_path: string; views: number }[] }) => {
         setTotalPages(data.total)
@@ -51,9 +46,9 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
       .finally(() => setPagesLoadingMore(false))
   }, [siteId, startDate, endDate])
 
-  const fetchEvents = useCallback((offset: number, append: boolean) => {
+  const fetchEvents = useCallback((offset: number, append: boolean, signal?: AbortSignal) => {
     if (append) setEventsLoadingMore(true)
-    fetch(`/api/events?${buildParams({ limit: String(PAGE_SIZE), offset: String(offset) })}`)
+    fetch(`/api/events?${buildParams({ limit: String(PAGE_SIZE), offset: String(offset) })}`, { signal })
       .then(r => r.json())
       .then((data: { total: number; items: { event_name: string; count: number }[] }) => {
         setTotalEvents(data.total)
@@ -64,9 +59,21 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
   }, [siteId, startDate, endDate])
 
   useEffect(() => {
-    fetchStats()
-    fetchPages(0, false)
-    fetchEvents(0, false)
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    setStats(null)
+    setPages([])
+    setTotalPages(0)
+    setEvents([])
+    setTotalEvents(0)
+    fetch(`/api/stats?${buildParams()}`, { signal: ac.signal })
+      .then(r => r.json())
+      .then(setStats)
+      .catch(() => {})
+    fetchPages(0, false, ac.signal)
+    fetchEvents(0, false, ac.signal)
+    return () => ac.abort()
   }, [siteId, startDate, endDate])
 
   const handlePagesScroll = useCallback(() => {

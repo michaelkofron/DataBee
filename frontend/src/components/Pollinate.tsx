@@ -121,6 +121,23 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
 
   const title = siteName ? `Pollinations — ${siteName}` : 'Pollinations — All Sites'
 
+  // ── Reset everything when site changes ────────────────────────────────────
+  useEffect(() => {
+    setSelectedA(null)
+    setSelectedB(null)
+    setPreviewCount(null)
+    setPreviewLoading(false)
+    setColonySearch('')
+    setFormName('')
+    setCounts({})
+    setCountLoading({})
+    setExpandedPol(null)
+    setOverlapUuids({})
+    setOverlapUuidLoading({})
+    setJourney(null)
+    setSaveError('')
+  }, [siteId])
+
   // ── Fetch colonies for dropdowns ──────────────────────────────────────────
   useEffect(() => {
     const p = new URLSearchParams()
