@@ -47,10 +47,10 @@ function VennDiagram({ a, b, overlap, nameA, nameB, uid }: {
   a: number; b: number; overlap: number; nameA: string; nameB: string; uid: string
 }) {
   const VW = 500, VH = 250, CY = 115
-  const MAX_R = 88, MIN_R = 40
+  const MAX_R = 88, MIN_R = 18
   const maxCount = Math.max(a, b, 1)
-  const ra = MIN_R + (MAX_R - MIN_R) * Math.sqrt(a / maxCount)
-  const rb = MIN_R + (MAX_R - MIN_R) * Math.sqrt(b / maxCount)
+  const ra = Math.max(MIN_R, MAX_R * Math.sqrt(a / maxCount))
+  const rb = Math.max(MIN_R, MAX_R * Math.sqrt(b / maxCount))
   const overlapRatio = (a > 0 && b > 0) ? Math.min(overlap / Math.min(a, b), 1) : 0
   const rMin = Math.min(ra, rb), rMax = Math.max(ra, rb)
   const dist = overlapRatio >= 1
