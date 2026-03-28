@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Hive, Journey, JourneyEvent, Pollination, PollinationCount, UuidRow } from '../types'
+import type { ConditionStep, Hive, Journey, JourneyEvent, Pollination, PollinationCount, UuidRow } from '../types'
+
+function colonySummary(steps: ConditionStep[]): string {
+  return steps.map((step, si) => {
+    const rows = step.conditions.map(c => `${c.field.replace(/_/g, ' ')} ${c.match.replace(/_/g, ' ')} "${c.value}"`).join(` ${step.operator} `)
+    if (si === 0) return rows
+    return `→ ${rows}`
+  }).join(' · ')
+}
 
 const PAGE_SIZE = 100
 
@@ -104,8 +112,11 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   // Create form
   const [showCreate, setShowCreate] = useState(false)
   const [formName, setFormName] = useState('')
-  const [formHiveA, setFormHiveA] = useState('')
-  const [formHiveB, setFormHiveB] = useState('')
+  const [colonySearch, setColonySearch] = useState('')
+  const [selectedA, setSelectedA] = useState<string | null>(null)
+  const [selectedB, setSelectedB] = useState<string | null>(null)
+  const [previewCount, setPreviewCount] = useState<PollinationCount | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
@@ -119,8 +130,6 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
       .then(r => r.json())
       .then((data: Hive[]) => {
         setColonies(data)
-        setFormHiveA('')
-        setFormHiveB('')
       })
       .catch(() => {})
   }, [siteId, coloniesVersion])
@@ -227,9 +236,38 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
       .catch(() => { setJourneyError('Failed to load journey'); setJourneyLoading(false) })
   }
 
+  // ── Preview fetch (live Venn when both colonies selected) ─────────────────
+  useEffect(() => {
+    if (!selectedA || !selectedB) { setPreviewCount(null); return }
+    setPreviewLoading(true)
+    const p = new URLSearchParams({ hive_a: selectedA, hive_b: selectedB })
+    if (startDate) p.set('start', startDate)
+    if (endDate) p.set('end', endDate)
+    fetch(`/api/hives/compare?${p}`)
+      .then(r => r.json())
+      .then((data: PollinationCount) => setPreviewCount(data))
+      .catch(() => {})
+      .finally(() => setPreviewLoading(false))
+  }, [selectedA, selectedB, startDate, endDate])
+
+  const toggleColonySelect = (id: string) => {
+    if (selectedA === id) {
+      setSelectedA(selectedB)
+      setSelectedB(null)
+    } else if (selectedB === id) {
+      setSelectedB(null)
+    } else if (!selectedA) {
+      setSelectedA(id)
+    } else if (!selectedB) {
+      setSelectedB(id)
+    } else {
+      setSelectedB(id)
+    }
+  }
+
   // ── Save ──────────────────────────────────────────────────────────────────
   const save = async () => {
-    if (!formName.trim() || !formHiveA || !formHiveB) return
+    if (!formName.trim() || !selectedA || !selectedB) return
     setSaving(true)
     setSaveError('')
     try {
@@ -239,14 +277,14 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
         body: JSON.stringify({
           name: formName.trim(),
           site_id: siteId || null,
-          hive_a_id: formHiveA,
-          hive_b_id: formHiveB,
+          hive_a_id: selectedA,
+          hive_b_id: selectedB,
         }),
       })
       if (!res.ok) { setSaveError('Failed to save'); return }
       const newPol: Pollination = await res.json()
       setPollinations(prev => [newPol, ...prev])
-      setFormName(''); setFormHiveA(''); setFormHiveB(''); setShowCreate(false)
+      setFormName(''); setSelectedA(null); setSelectedB(null); setColonySearch(''); setPreviewCount(null); setShowCreate(false)
       setExpandedPol(newPol.id)
       countPollination(newPol.id)
       fetchOverlapUuids(newPol.id, 0, false)
@@ -262,7 +300,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   }
 
   const colonyName = (id: string) => colonies.find(c => c.id === id)?.name ?? id
-  const canSave = formName.trim() && formHiveA && formHiveB && formHiveA !== formHiveB
+  const filteredColonies = colonies.filter(c => c.name.toLowerCase().includes(colonySearch.toLowerCase()))
 
   const sessions = journey ? groupBySession(journey.events) : []
 
@@ -287,47 +325,132 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
 
       {/* Creator */}
       {showCreate && (
-        <div className="card" style={{ marginBottom: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>New cross-pollination</div>
-          <input
-            className="input"
-            placeholder="Name this comparison"
-            value={formName}
-            onChange={e => setFormName(e.target.value)}
-            style={{ fontSize: 13 }}
-          />
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <select
-              className="select"
-              value={formHiveA}
-              onChange={e => setFormHiveA(e.target.value)}
+        <div className="card" style={{ marginBottom: 20, overflow: 'hidden' }}>
+          {/* Live Venn preview — shown as soon as both colonies are selected */}
+          {selectedA && selectedB && (
+            <div style={{ borderBottom: '1px solid var(--border)' }}>
+              {previewLoading ? (
+                <div style={{ padding: 32, textAlign: 'center' }}>
+                  <span className="spinner" style={{ width: 20, height: 20 }} />
+                </div>
+              ) : previewCount ? (
+                <div style={{ padding: '16px 16px 12px', display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <VennDiagram
+                      a={previewCount.a_count} b={previewCount.b_count}
+                      overlap={previewCount.overlap}
+                      nameA={colonyName(selectedA)} nameB={colonyName(selectedB)}
+                      uid="preview"
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 180px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ padding: '10px 14px', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{colonyName(selectedA)}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1 }}>{previewCount.a_count.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{previewCount.a_only.toLocaleString()} only here</div>
+                    </div>
+                    <div style={{ padding: '10px 14px', background: '#fffbeb', borderRadius: 'var(--radius-sm)', border: '1px solid #fcd34d' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Overlap</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: '#d97706' }}>{previewCount.overlap.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: '#92400e', marginTop: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {previewCount.a_count > 0 && <span>{Math.round((previewCount.overlap / previewCount.a_count) * 100)}% of {colonyName(selectedA)}</span>}
+                        {previewCount.b_count > 0 && <span>{Math.round((previewCount.overlap / previewCount.b_count) * 100)}% of {colonyName(selectedB)}</span>}
+                      </div>
+                    </div>
+                    <div style={{ padding: '10px 14px', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{colonyName(selectedB)}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1 }}>{previewCount.b_count.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{previewCount.b_only.toLocaleString()} only here</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Header + search */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: 14, flexShrink: 0 }}>Cross-pollinate</span>
+            <input
+              className="input"
+              placeholder="Search colonies…"
+              value={colonySearch}
+              onChange={e => setColonySearch(e.target.value)}
               style={{ flex: 1, fontSize: 13 }}
-            >
-              <option value="">Colony A…</option>
-              {colonies.map(c => (
-                <option key={c.id} value={c.id} disabled={c.id === formHiveB}>{c.name}</option>
-              ))}
-            </select>
-            <span style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: 13 }}>vs</span>
-            <select
-              className="select"
-              value={formHiveB}
-              onChange={e => setFormHiveB(e.target.value)}
-              style={{ flex: 1, fontSize: 13 }}
-            >
-              <option value="">Colony B…</option>
-              {colonies.map(c => (
-                <option key={c.id} value={c.id} disabled={c.id === formHiveA}>{c.name}</option>
-              ))}
-            </select>
+            />
+            <button
+              className="btn btn-ghost"
+              onClick={() => { setShowCreate(false); setSelectedA(null); setSelectedB(null); setColonySearch(''); setFormName(''); setSaveError('') }}
+              style={{ fontSize: 13, padding: '4px 8px', flexShrink: 0 }}
+            >✕</button>
           </div>
-          {saveError && <div style={{ fontSize: 12, color: 'var(--error)' }}>{saveError}</div>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-primary" onClick={save} disabled={saving || !canSave} style={{ fontSize: 13, padding: '6px 16px' }}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button className="btn btn-ghost" onClick={() => setShowCreate(false)} style={{ fontSize: 13 }}>Cancel</button>
+
+          {/* Colony list */}
+          <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+            {filteredColonies.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                {colonies.length === 0 ? 'No colonies saved yet — create some first.' : 'No colonies match your search.'}
+              </div>
+            ) : filteredColonies.map(c => {
+              const isA = selectedA === c.id
+              const isB = selectedB === c.id
+              const isSelected = isA || isB
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => toggleColonySelect(c.id)}
+                  style={{
+                    padding: '10px 16px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    borderBottom: '1px solid var(--border)',
+                    background: isSelected ? 'var(--primary-light)' : undefined,
+                    userSelect: 'none',
+                  }}
+                >
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                    background: isSelected ? 'var(--primary)' : 'var(--surface-raised)',
+                    border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontWeight: 700,
+                    color: isSelected ? '#fff' : 'var(--text-muted)',
+                  }}>
+                    {isA ? 'A' : isB ? 'B' : ''}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: isSelected ? 600 : 400, fontSize: 13, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{c.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {colonySummary(c.steps)}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
+
+          {/* Save section — shown when both colonies are selected */}
+          {selectedA && selectedB && (
+            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                className="input"
+                placeholder="Name this pollination…"
+                value={formName}
+                onChange={e => setFormName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && save()}
+                style={{ fontSize: 13 }}
+                autoFocus
+              />
+              {saveError && <div style={{ fontSize: 12, color: 'var(--error)' }}>{saveError}</div>}
+              <button
+                className="btn btn-primary"
+                onClick={save}
+                disabled={saving || !formName.trim()}
+                style={{ width: '100%', fontSize: 13, padding: '8px 0' }}
+              >
+                {saving ? 'Saving…' : 'Save as Pollination'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

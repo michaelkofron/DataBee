@@ -478,6 +478,17 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
             </div>
           )}
         </div>
+        {filterActive && steps.length > 0 && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => { setColonyName(''); setSaveError(''); setShowSaveModal(true) }}
+              style={{ width: '100%', fontSize: 13, padding: '8px 0' }}
+            >
+              Save as Colony
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Colony creator */}
@@ -485,11 +496,6 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Colony creator</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            {filterActive && steps.length > 0 && (
-              <button className="btn btn-primary" onClick={() => { setColonyName(''); setSaveError(''); setShowSaveModal(true) }} style={{ padding: '4px 12px', fontSize: 12 }}>
-                Save as Colony
-              </button>
-            )}
             {steps.length === 0 && (
               <button className="btn btn-ghost" onClick={() => setSteps([newStep()])} style={{ padding: '4px 10px', fontSize: 12 }}>
                 New Colony +
@@ -616,7 +622,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
                   disabled={filterLoading || !stepsValid}
                   style={{ padding: '4px 12px', fontSize: 12 }}
                 >
-                  {filterLoading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Search'}
+                  {filterLoading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Preview'}
                 </button>
               </div>
             </div>

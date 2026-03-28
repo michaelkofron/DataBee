@@ -425,6 +425,25 @@ def hive_count(
     return {"hive_id": hive_id, "count": count}
 
 
+@app.get("/api/hives/compare")
+def compare_hives(
+    hive_a: str,
+    hive_b: str,
+    start: str | None = None,
+    end: str | None = None,
+):
+    set_a = _matching_uuids(hive_a, start, end)
+    set_b = _matching_uuids(hive_b, start, end)
+    overlap = set_a & set_b
+    return {
+        "a_count": len(set_a),
+        "b_count": len(set_b),
+        "overlap": len(overlap),
+        "a_only": len(set_a - set_b),
+        "b_only": len(set_b - set_a),
+    }
+
+
 # ── Shared helper ─────────────────────────────────────────────────────────────
 
 _uuid_set_cache: dict[tuple, tuple[frozenset, float]] = {}
