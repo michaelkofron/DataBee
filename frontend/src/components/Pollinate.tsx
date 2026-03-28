@@ -261,6 +261,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
       setSelectedB(id)
     } else {
       setSelectedA(id)
+      setSelectedB(null)
     }
   }
 
