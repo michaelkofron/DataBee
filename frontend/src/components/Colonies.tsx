@@ -64,9 +64,10 @@ const MATCH_OPTIONS: { value: HiveConditionMatch; label: string }[] = [
 ]
 
 const SEQUENCE_OPTIONS: { value: HiveSequence; label: string }[] = [
-  { value: 'immediately',  label: 'immediately after' },
-  { value: 'next_session', label: 'in the next session' },
-  { value: 'anytime',      label: 'any time later' },
+  { value: 'immediately',   label: 'immediately after' },
+  { value: 'same_session',  label: 'in the same session' },
+  { value: 'next_session',  label: 'in the next session' },
+  { value: 'anytime',       label: 'any time later' },
 ]
 
 function placeholderFor(field: HiveConditionField) {

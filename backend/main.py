@@ -751,6 +751,7 @@ def _journey_matches(events: list[tuple], steps: list[dict]) -> bool:
     OR  step: find the earliest event satisfying ANY condition.
 
     sequence="immediately": the very next event after the previous match must satisfy this step.
+    sequence="same_session": scan remaining events in the same session for a match.
     sequence="next_session": scan the entire next session for a match.
     sequence="anytime": scan any event after the previous match.
     """
@@ -790,6 +791,9 @@ def _journey_matches(events: list[tuple], steps: list[dict]) -> bool:
         if si == 0:
             search_start = 0
             session: str | None = None
+        elif sequence == "same_session":
+            search_start = prev_idx + 1
+            session = events[prev_idx][1]
         elif sequence == "next_session":
             cur_session = events[prev_idx][1]
             next_start = next(
