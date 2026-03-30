@@ -44,7 +44,90 @@ function loadSelectedSite(): string {
   } catch { return '' }
 }
 
+function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      const resp = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password }),
+      })
+      if (resp.ok) { onSuccess(); return }
+      const data = await resp.json().catch(() => ({}))
+      setError(data.detail ?? 'Login failed')
+    } catch {
+      setError('Could not reach backend')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <form onSubmit={handleSubmit} style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)', padding: 32, width: 340,
+        boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>
+          🐝 Humblebee
+        </div>
+        <input
+          type="password"
+          className="input"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="Password"
+          autoFocus
+          style={{ width: '100%' }}
+        />
+        {error && (
+          <div style={{ color: 'var(--error)', fontSize: 12 }}>{error}</div>
+        )}
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={submitting || !password}
+          style={{ width: '100%' }}
+        >
+          {submitting ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false)
+  const [needsLogin, setNeedsLogin] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/auth-status').then(r => r.json()).then(data => {
+      if (!data.auth_enabled) { setAuthChecked(true); return }
+      fetch('/api/sites', { credentials: 'include' }).then(r => {
+        if (r.status === 401) setNeedsLogin(true)
+        setAuthChecked(true)
+      })
+    }).catch(() => setAuthChecked(true))
+  }, [])
+
+  if (!authChecked) return null
+  if (needsLogin) return <LoginScreen onSuccess={() => setNeedsLogin(false)} />
+  return <AppInner />
+}
+
+function AppInner() {
   const [sites, setSites] = useState<Site[]>([])
   const [selectedSite, setSelectedSite] = useState<string>(loadSelectedSite)
   const [view, setView] = useState<View>(viewFromPath)

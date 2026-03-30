@@ -1,11 +1,16 @@
+import hashlib
+import hmac as _hmac
 import json
+import os
+import secrets
 import threading
 import time
 import uuid as _uuid
 from datetime import date, datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -15,6 +20,83 @@ from tracking import router as tracking_router
 load_dotenv(dotenv_path="../.env")
 
 app = FastAPI(title="Humblebee")
+
+# ── Auth ─────────────────────────────────────────────────────────────────────
+
+AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "").lower() in ("true", "1", "yes")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+SECURE_COOKIES = os.environ.get("SECURE_COOKIES", "").lower() in ("true", "1", "yes")
+_AUTH_SECRET = secrets.token_hex(32)
+
+_login_attempts: dict[str, list[float]] = {}
+_LOGIN_WINDOW = 60.0
+_LOGIN_MAX = 5
+
+
+def _rate_limit_login(ip: str) -> bool:
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    _login_attempts[ip] = attempts
+    if len(attempts) >= _LOGIN_MAX:
+        return True
+    attempts.append(now)
+    return False
+
+
+def _make_token() -> str:
+    return _hmac.new(_AUTH_SECRET.encode(), ADMIN_PASSWORD.encode(), hashlib.sha256).hexdigest()
+
+
+# Paths that skip auth: login, auth check, event collection, tracking script
+_PUBLIC_PATHS = {"/api/login", "/api/auth-status", "/api/collect", "/hb.js"}
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if not AUTH_ENABLED or not ADMIN_PASSWORD:
+        return await call_next(request)
+    if request.url.path in _PUBLIC_PATHS or request.method == "OPTIONS":
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        token = request.cookies.get("hb_session")
+        if token != _make_token():
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@app.post("/api/login")
+def login(req: LoginRequest, request: Request):
+    if not AUTH_ENABLED or not ADMIN_PASSWORD:
+        return {"ok": True}
+    client_ip = request.client.host if request.client else "unknown"
+    if _rate_limit_login(client_ip):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in a minute.")
+    if not _hmac.compare_digest(req.password, ADMIN_PASSWORD):
+        raise HTTPException(status_code=403, detail="Wrong password")
+    resp = JSONResponse(content={"ok": True})
+    resp.set_cookie(
+        key="hb_session",
+        value=_make_token(),
+        httponly=True,
+        samesite="lax",
+        secure=SECURE_COOKIES,
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
+    return resp
+
+
+@app.get("/api/auth-status")
+def auth_status():
+    return {"auth_enabled": AUTH_ENABLED}
+
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
 
 app.add_middleware(
     CORSMiddleware,
