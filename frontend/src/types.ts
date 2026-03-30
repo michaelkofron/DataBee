@@ -4,6 +4,7 @@ export interface Site {
   site_name: string
   domain: string
   created_at: string
+  allowed_events: string[]
 }
 
 export interface OverviewStats {
@@ -87,4 +88,4 @@ export interface PollinationCount {
   b_only: number
 }
 
-export type View = 'overview' | 'colonies' | 'pollinate'
+export type View = 'overview' | 'colonies' | 'pollinate' | 'sites'

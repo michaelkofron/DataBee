@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from database import init_db, DB_PATH
+from tracking import router as tracking_router
 
 load_dotenv(dotenv_path="../.env")
 
@@ -17,11 +18,13 @@ app = FastAPI(title="Humblebee")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(tracking_router)
 
 # Each thread gets its own DuckDB connection to avoid concurrency issues.
 _local = threading.local()
@@ -67,15 +70,70 @@ def health():
 @app.get("/api/sites")
 def list_sites():
     rows = db().execute(
-        "SELECT site_id, site_uuid, site_name, domain, created_at FROM sites ORDER BY site_name"
+        "SELECT site_id, site_uuid, site_name, domain, created_at, allowed_events FROM sites ORDER BY site_name"
     ).fetchall()
     return [
         {
             "site_id": r[0], "site_uuid": r[1], "site_name": r[2],
             "domain": r[3], "created_at": str(r[4]),
+            "allowed_events": json.loads(r[5]) if r[5] else [],
         }
         for r in rows
     ]
+
+
+class SiteCreate(BaseModel):
+    name: str
+    domain: str
+    allowed_events: list[str] = []
+
+
+@app.post("/api/sites")
+def create_site(body: SiteCreate):
+    name = body.name.strip()
+    domain = body.domain.strip().lower()
+    domain = domain.replace("https://", "").replace("http://", "").rstrip("/")
+    if not name or not domain:
+        raise HTTPException(400, "Name and domain are required")
+    allowed = [e.strip() for e in body.allowed_events if e.strip()]
+    site_id = str(_uuid.uuid4())
+    site_uuid = str(_uuid.uuid4())
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    db().execute(
+        "INSERT INTO sites (site_id, site_uuid, site_name, domain, created_at, allowed_events) VALUES (?,?,?,?,?,?)",
+        [site_id, site_uuid, name, domain, now, json.dumps(allowed)],
+    )
+    return {"site_id": site_id, "site_uuid": site_uuid, "site_name": name, "domain": domain, "created_at": now, "allowed_events": allowed}
+
+
+class SiteUpdate(BaseModel):
+    allowed_events: list[str]
+
+
+@app.put("/api/sites/{site_id}")
+def update_site(site_id: str, body: SiteUpdate):
+    row = db().execute("SELECT site_id FROM sites WHERE site_id = ?", [site_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Site not found")
+    allowed = [e.strip() for e in body.allowed_events if e.strip()]
+    db().execute("UPDATE sites SET allowed_events = ? WHERE site_id = ?", [json.dumps(allowed), site_id])
+    return {"ok": True, "allowed_events": allowed}
+
+
+@app.delete("/api/sites/{site_id}")
+def delete_site(site_id: str):
+    row = db().execute("SELECT site_id FROM sites WHERE site_id = ?", [site_id]).fetchone()
+    if not row:
+        raise HTTPException(404, "Site not found")
+    # Cascade: delete events, colonies, pollinations for this site
+    colony_ids = [r[0] for r in db().execute("SELECT id FROM colonies WHERE site_id = ?", [site_id]).fetchall()]
+    if colony_ids:
+        placeholders = ",".join(["?"] * len(colony_ids))
+        db().execute(f"DELETE FROM pollinations WHERE colony_a_id IN ({placeholders}) OR colony_b_id IN ({placeholders})", colony_ids + colony_ids)
+        db().execute(f"DELETE FROM colonies WHERE id IN ({placeholders})", colony_ids)
+    db().execute("DELETE FROM events WHERE site_id = ?", [site_id])
+    db().execute("DELETE FROM sites WHERE site_id = ?", [site_id])
+    return {"ok": True}
 
 
 # ── Overview stats ────────────────────────────────────────────────────────────

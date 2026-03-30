@@ -54,6 +54,11 @@ def init_db() -> duckdb.DuckDBPyConnection:
         )
     """)
 
+    # Migrate: add allowed_events to sites if missing
+    site_cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'sites'").fetchall()]
+    if 'allowed_events' not in site_cols:
+        con.execute("ALTER TABLE sites ADD COLUMN allowed_events TEXT DEFAULT '[]'")
+
     # Migrate: add site_id to colonies if missing
     cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'colonies'").fetchall()]
     if 'site_id' not in cols:

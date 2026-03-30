@@ -3,6 +3,7 @@ import type { Site, View } from './types'
 import Overview from './components/Overview'
 import Colonies from './components/Colonies'
 import Pollinate from './components/Pollinate'
+import Sites from './components/Sites'
 import DateRangePicker from './components/DateRangePicker'
 
 function daysAgoStr(n: number) {
@@ -35,12 +36,14 @@ export default function App() {
   const [coloniesVersion, setColoniesVersion] = useState(0)
   const onColonyMutated = useCallback(() => setColoniesVersion(v => v + 1), [])
 
-  useEffect(() => {
+  const fetchSites = useCallback(() => {
     fetch('/api/sites')
       .then(r => r.json())
       .then(setSites)
       .catch(() => {})
   }, [])
+
+  useEffect(() => { fetchSites() }, [fetchSites])
 
   const handleDateChange = (start: string, end: string, preset: string | null) => {
     setStartDate(start)
@@ -57,6 +60,7 @@ export default function App() {
     { key: 'overview', label: 'Overview' },
     { key: 'colonies', label: 'Colonies' },
     { key: 'pollinate', label: 'Pollinations' },
+    { key: 'sites', label: 'Sites' },
   ]
 
   return (
@@ -117,6 +121,9 @@ export default function App() {
         </div>
         <div style={{ display: view === 'pollinate' ? undefined : 'none' }}>
           <Pollinate siteId={selectedSite} siteName={sites.find(s => s.site_id === selectedSite)?.site_name ?? null} startDate={startDate} endDate={endDate} coloniesVersion={coloniesVersion} />
+        </div>
+        <div style={{ display: view === 'sites' ? undefined : 'none' }}>
+          <Sites onSitesMutated={fetchSites} />
         </div>
       </div>
     </>

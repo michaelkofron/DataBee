@@ -5,3 +5,4 @@ frontend/dist/
 storage/*.duckdb*
 .env
 michaelsnotes.md
+test-site/
