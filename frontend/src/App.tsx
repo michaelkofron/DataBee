@@ -132,14 +132,20 @@ function AppInner() {
   const [coloniesVersion, setColoniesVersion] = useState(0)
   const onColonyMutated = useCallback(() => setColoniesVersion(v => v + 1), [])
 
-  const fetchSites = useCallback(() => {
+  const fetchSites = useCallback((opts?: { redirectIfEmpty?: boolean }) => {
     fetch('/api/sites')
       .then(r => r.json())
-      .then(setSites)
+      .then((data: Site[]) => {
+        setSites(data)
+        if (opts?.redirectIfEmpty && data.length === 0) {
+          window.history.pushState(null, '', '/sites')
+          setView('sites')
+        }
+      })
       .catch(() => {})
   }, [])
 
-  useEffect(() => { fetchSites() }, [fetchSites])
+  useEffect(() => { fetchSites({ redirectIfEmpty: true }) }, [fetchSites])
 
   // Sync view to URL path
   const navigate = (v: View) => {

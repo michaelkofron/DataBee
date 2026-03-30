@@ -5,7 +5,7 @@ import { formatTs, localDateStr } from '../utils'
 const PAGE_SIZE = 100
 
 const CONDITION_FIELDS: { value: ColonyConditionField; label: string; placeholder: string }[] = [
-  { value: 'event_name',    label: 'Action',        placeholder: 'e.g. signup' },
+  { value: 'event_name',    label: 'action',        placeholder: 'e.g. signup' },
   { value: 'page_path',     label: 'Page path',     placeholder: 'e.g. /pricing' },
   { value: 'entry_page',    label: 'Entry page',    placeholder: 'e.g. /blog/getting-started' },
   { value: 'page_referrer', label: 'Page referrer', placeholder: 'e.g. google.com' },

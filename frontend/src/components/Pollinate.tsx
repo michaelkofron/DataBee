@@ -4,7 +4,10 @@ import { formatTs, localDateStr } from '../utils'
 
 function colonySummary(steps: ConditionStep[]): string {
   return steps.map((step, si) => {
-    const rows = step.conditions.map(c => `${c.field.replace(/_/g, ' ')} ${c.match.replace(/_/g, ' ')} "${c.value}"`).join(` ${step.operator} `)
+    const rows = step.conditions.map(c => {
+      const fieldLabel = c.field === 'event_name' ? 'action' : c.field.replace(/_/g, ' ')
+      return `${fieldLabel} ${c.match.replace(/_/g, ' ')} "${c.value}"`
+    }).join(` ${step.operator} `)
     if (si === 0) return rows
     return `→ ${rows}`
   }).join(' · ')

@@ -145,7 +145,7 @@ export default function Sites({ onSitesMutated }: { onSitesMutated: () => void }
       {/* Snippet display after creation */}
       {snippetSite && (
         <div className="card" style={{ marginBottom: 20, borderColor: 'var(--primary)' }}>
-          <div className="card-header" style={{ background: 'var(--primary-light)' }}>
+          <div className="card-header" style={{ background: 'var(--primary-light)', borderRadius: 'var(--radius) var(--radius) 0 0' }}>
             Install snippet
           </div>
           <div className="card-body">
