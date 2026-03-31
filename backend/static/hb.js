@@ -38,7 +38,7 @@
   var isNew=!sid;
   if(!sid){sid=uid()}
   // Refresh the session cookie expiry.
-  sC("_hb_sid",sid,120);
+  sC("_hb_sid",sid,1800);
 
   // -- Send helper --
 
@@ -47,7 +47,7 @@
     var p=location.pathname+location.search;
     var body=JSON.stringify({site_uuid:sk,uuid:u,session_id:sid,event_name:eventName,page_path:p,properties:props||null});
     fetch(base+"/api/collect",{method:"POST",body:body,headers:{"Content-Type":"application/json"},keepalive:true}).catch(function(){});
-    sC("_hb_sid",sid,120);
+    sC("_hb_sid",sid,1800);
   }
 
   // -- Page view tracking --
