@@ -50,7 +50,7 @@ This creates a Python virtualenv, installs backend dependencies, and runs `npm i
 **2. (Optional for testing purposes) Seed the database with sample data**
 
 ```bash
-cd backend && python seed.py
+cd backend && source .venv/bin/activate && python seed.py
 ```
 
 Generates ~15,000 realistic visitors across 90 days, spread across behavioral archetypes — bouncers, browsers, returners, deep readers, converters — with randomized page paths, sessions, and events. Good for exploring the UI before your real data comes in. Re-runnable; clears and reseeds each time.
