@@ -32,12 +32,31 @@
 
   // -- Session management --
 
-  // _hb_sid has a rolling expiry. If it's missing, the previous
-  // session timed out (or this is the first visit) -- start a new session.
+  // _hb_sid is a rolling-expiry cookie. We also mirror the session ID into
+  // sessionStorage so that internal navigations after the cookie has expired
+  // don't incorrectly start a new session. sessionStorage is tab-scoped and
+  // survives page navigations but not new tabs or browser restarts, so it
+  // can't produce false continuity across genuine separate visits.
   var sid=gC("_hb_sid");
   var isNew=!sid;
-  if(!sid){sid=uid()}
-  // Refresh the session cookie expiry.
+  if(!sid){
+    // Cookie expired. Check whether the user was still on this site (internal
+    // navigation) by comparing the referrer origin to the current origin.
+    var _stored=sessionStorage.getItem("_hb_sid");
+    var _ref=document.referrer;
+    var _sameOrigin=false;
+    function _stripWww(o){return o.replace(/^(https?:\/\/)www\./,"$1")}
+    try{_sameOrigin=_ref&&_stripWww(new URL(_ref).origin)===_stripWww(window.location.origin)}catch(e){}
+    if(_stored&&_sameOrigin){
+      // Internal navigation after idle timeout -- continue the existing session.
+      sid=_stored;
+      isNew=false;
+    }else{
+      sid=uid();
+    }
+  }
+  // Keep sessionStorage in sync and refresh the cookie expiry.
+  sessionStorage.setItem("_hb_sid",sid);
   sC("_hb_sid",sid,1800);
 
   // -- Send helper --
