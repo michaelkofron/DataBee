@@ -270,16 +270,18 @@ def seed():
         site_id   = str(uuid.uuid4())
         site_uuid = str(uuid.uuid4())
         s["site_id"] = site_id
+        all_actions = sorted(set(["page_view"] + s["conversion_events"] + s["extra_events"]))
         site_rows.append((
             site_id,
             site_uuid,
             s["site_name"],
             s["domain"],
             NOW - timedelta(days=random.randint(100, 365)),
+            json.dumps(all_actions),
         ))
 
     con.executemany(
-        "INSERT INTO sites (site_id, site_uuid, site_name, domain, created_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO sites (site_id, site_uuid, site_name, domain, created_at, allowed_actions) VALUES (?,?,?,?,?,?)",
         site_rows,
     )
     print(f"Sites created: {len(site_rows)}")
