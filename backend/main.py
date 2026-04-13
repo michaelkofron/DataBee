@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -1018,4 +1018,14 @@ def _event_matches(event: tuple, field: str, value: str, contains: bool = False)
 # In dev, Vite serves the frontend separately and proxies /api to this server.
 _FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 if _FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIST), html=True), name="frontend")
+    # Serve Vite's hashed asset bundle separately.
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="assets")
+
+    # Catch-all: serve any real file from the dist root (favicon, etc.),
+    # otherwise fall back to index.html so React Router handles the path.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file = _FRONTEND_DIST / full_path
+        if file.is_file():
+            return FileResponse(str(file))
+        return FileResponse(str(_FRONTEND_DIST / "index.html"))
