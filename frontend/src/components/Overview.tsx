@@ -80,13 +80,15 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
   const handlePagesScroll = useCallback(() => {
     const el = pagesRef.current
     if (!el || pagesLoadingMore || pages.length >= totalPages) return
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) fetchPages(pages.length, true)
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40)
+      fetchPages(pages.length, true, abortRef.current?.signal)
   }, [pagesLoadingMore, pages.length, totalPages, fetchPages])
 
   const handleEventsScroll = useCallback(() => {
     const el = eventsRef.current
     if (!el || eventsLoadingMore || events.length >= totalEvents) return
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) fetchEvents(events.length, true)
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40)
+      fetchEvents(events.length, true, abortRef.current?.signal)
   }, [eventsLoadingMore, events.length, totalEvents, fetchEvents])
 
   return (

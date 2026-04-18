@@ -137,6 +137,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
   const [journeyLoading, setJourneyLoading] = useState(false)
   const [journeyError, setJourneyError] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Steps filter
   const [steps, setSteps] = useState<ConditionStep[]>([])
@@ -160,7 +161,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
   const [saveError, setSaveError] = useState('')
 
   // ── Fetch UUIDs (default mode) ──────────────────────────────────────────
-  const fetchUuids = useCallback((offset: number, append: boolean) => {
+  const fetchUuids = useCallback((offset: number, append: boolean, signal?: AbortSignal) => {
     if (filterActive) return
     if (append) setLoadingMore(true)
     else setUuidsLoading(true)
@@ -169,7 +170,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
     if (uuidSearch) p.set('q', uuidSearch)
     if (startDate) p.set('start', localDayStartUTC(startDate))
     if (endDate) p.set('end', localDayEndUTC(endDate))
-    fetch(`/api/uuids?${p}`)
+    fetch(`/api/uuids?${p}`, { signal })
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
         setTotalUuids(data.total)
@@ -181,17 +182,22 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
 
   useEffect(() => {
     if (filterActive) return
-    fetchUuids(0, false)
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    fetchUuids(0, false, ac.signal)
+    return () => ac.abort()
   }, [siteId, uuidSearch, filterActive, startDate, endDate])
 
   // ── Fetch filtered UUIDs ────────────────────────────────────────────────
-  const fetchFiltered = useCallback((offset: number, append: boolean) => {
+  const fetchFiltered = useCallback((offset: number, append: boolean, signal?: AbortSignal) => {
     if (append) setLoadingMore(true)
     else setFilterLoading(true)
     fetch('/api/journey/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ steps, site_id: siteId || null, limit: PAGE_SIZE, offset, start: startDate ? localDayStartUTC(startDate) : null, end: endDate ? localDayEndUTC(endDate) : null }),
+      signal,
     })
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -217,8 +223,9 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
     if (!el || loadingMore) return
     if (uuids.length >= totalUuids) return
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-      if (filterActive) fetchFiltered(uuids.length, true)
-      else fetchUuids(uuids.length, true)
+      const signal = abortRef.current?.signal
+      if (filterActive) fetchFiltered(uuids.length, true, signal)
+      else fetchUuids(uuids.length, true, signal)
     }
   }, [loadingMore, uuids.length, totalUuids, filterActive, fetchFiltered, fetchUuids])
 

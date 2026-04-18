@@ -104,6 +104,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   const [overlapUuidLoading, setOverlapUuidLoading] = useState<Record<string, boolean>>({})
   const [overlapLoadingMore, setOverlapLoadingMore] = useState(false)
   const overlapListRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Journey modal
   const [journey, setJourney] = useState<Journey | null>(null)
@@ -198,13 +199,13 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   }, [startDate, endDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Overlap UUID fetch ────────────────────────────────────────────────────
-  const fetchOverlapUuids = useCallback((id: string, offset: number, append: boolean) => {
+  const fetchOverlapUuids = useCallback((id: string, offset: number, append: boolean, signal?: AbortSignal) => {
     if (append) setOverlapLoadingMore(true)
     else setOverlapUuidLoading(prev => ({ ...prev, [id]: true }))
     const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (startDate) p.set('start', localDayStartUTC(startDate))
     if (endDate) p.set('end', localDayEndUTC(endDate))
-    fetch(`/api/pollinations/${id}/overlap-uuids?${p}`)
+    fetch(`/api/pollinations/${id}/overlap-uuids?${p}`, { signal })
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
         setOverlapUuids(prev => ({ ...prev, [id]: append ? [...(prev[id] ?? []), ...data.items] : data.items }))
@@ -222,9 +223,12 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
     if (expandedPol === id) {
       setExpandedPol(null)
     } else {
+      if (abortRef.current) abortRef.current.abort()
+      const ac = new AbortController()
+      abortRef.current = ac
       setExpandedPol(id)
       if (!counts[id] || isLive) countPollination(id)
-      if (!overlapUuids[id] || isLive) fetchOverlapUuids(id, 0, false)
+      if (!overlapUuids[id] || isLive) fetchOverlapUuids(id, 0, false, ac.signal)
     }
   }
 
@@ -237,7 +241,7 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
     const total = count?.overlap ?? 0
     if (list.length >= total) return
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-      fetchOverlapUuids(expandedPol, list.length, true)
+      fetchOverlapUuids(expandedPol, list.length, true, abortRef.current?.signal)
     }
   }, [overlapLoadingMore, expandedPol, overlapUuids, counts, fetchOverlapUuids])
 
