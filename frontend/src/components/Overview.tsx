@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { OverviewStats } from '../types'
+import { localDayStartUTC, localDayEndUTC } from '../utils'
 
 const PAGE_SIZE = 50
 
@@ -28,8 +29,8 @@ export default function Overview({ siteId, siteName, startDate, endDate }: {
   function buildParams(extra?: Record<string, string>) {
     const p = new URLSearchParams()
     if (siteId) p.set('site_id', siteId)
-    if (startDate) p.set('start', startDate)
-    if (endDate) p.set('end', endDate)
+    if (startDate) p.set('start', localDayStartUTC(startDate))
+    if (endDate) p.set('end', localDayEndUTC(endDate))
     if (extra) Object.entries(extra).forEach(([k, v]) => p.set(k, v))
     return p
   }

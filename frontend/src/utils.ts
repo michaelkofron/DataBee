@@ -12,7 +12,7 @@ export function daysAgoStr(n: number): string {
 
 /** Preset date ranges. Functions are evaluated at call-time so they always return fresh dates. */
 export const DATE_PRESETS = [
-  { label: 'Past 24 hours', start: () => daysAgoStr(0),  end: () => daysAgoStr(0) },
+  { label: 'Today',         start: () => daysAgoStr(0),  end: () => daysAgoStr(0) },
   { label: 'Last 3 days',   start: () => daysAgoStr(3),  end: () => daysAgoStr(1) },
   { label: 'Last 7 days',   start: () => daysAgoStr(7),  end: () => daysAgoStr(1) },
   { label: 'Last 28 days',  start: () => daysAgoStr(28), end: () => daysAgoStr(1) },
@@ -29,4 +29,25 @@ export const DATE_PRESETS = [
  */
 export function formatTs(ts: string): string {
   return new Date(ts.replace(' ', 'T') + 'Z').toLocaleString()
+}
+
+/**
+ * Convert a local YYYY-MM-DD date string to a UTC datetime string
+ * representing the start of that local day (midnight local → UTC).
+ * DuckDB receives this as a naive UTC timestamp, matching stored events.
+ */
+export function localDayStartUTC(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toISOString().replace('T', ' ').slice(0, 19)
+}
+
+/**
+ * Convert a local YYYY-MM-DD date string to a UTC datetime string
+ * representing the exclusive end of that local day (next local midnight → UTC).
+ * Pass this as the upper bound so the backend can use a simple < comparison.
+ */
+export function localDayEndUTC(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().replace('T', ' ').slice(0, 19)
 }

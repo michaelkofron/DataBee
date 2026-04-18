@@ -244,7 +244,7 @@ def stats(
     if start:
         where.append("timestamp >= $start::TIMESTAMP")
     if end:
-        where.append("timestamp < $end::TIMESTAMP + INTERVAL 1 DAY")
+        where.append("timestamp < $end::TIMESTAMP")
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
@@ -301,7 +301,7 @@ def _stat_filters(site_id, start, end):
         filters.append("timestamp >= CAST(? AS TIMESTAMP)")
         params.append(start)
     if end:
-        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        filters.append("timestamp < CAST(? AS TIMESTAMP)")
         params.append(end)
     clause = (" WHERE " + " AND ".join(filters)) if filters else ""
     return clause, params
@@ -371,7 +371,7 @@ def list_uuids(
         where.append("e.timestamp >= CAST(? AS TIMESTAMP)")
         params.append(start)
     if end:
-        where.append("e.timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        where.append("e.timestamp < CAST(? AS TIMESTAMP)")
         params.append(end)
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
@@ -542,7 +542,7 @@ def colony_count(
         filters.append("timestamp >= CAST(? AS TIMESTAMP)")
         params.append(start)
     if end:
-        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        filters.append("timestamp < CAST(? AS TIMESTAMP)")
         params.append(end)
 
     where = (" WHERE " + " AND ".join(filters)) if filters else ""
@@ -634,7 +634,7 @@ def _matching_uuids(colony_id: str, start: str | None, end: str | None) -> set[s
         filters.append("timestamp >= CAST(? AS TIMESTAMP)")
         params.append(start)
     if end:
-        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        filters.append("timestamp < CAST(? AS TIMESTAMP)")
         params.append(end)
 
     where = (" WHERE " + " AND ".join(filters)) if filters else ""
@@ -796,7 +796,7 @@ def journey_search(body: ConditionSearch):
         filters.append("timestamp >= CAST(? AS TIMESTAMP)")
         params.append(body.start)
     if body.end:
-        filters.append("timestamp < CAST(? AS TIMESTAMP) + INTERVAL 1 DAY")
+        filters.append("timestamp < CAST(? AS TIMESTAMP)")
         params.append(body.end)
 
     where = (" WHERE " + " AND ".join(filters)) if filters else ""

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Journey, JourneyEvent, UuidRow, Colony, ConditionRow, ConditionStep, ColonyConditionField, ColonyConditionMatch, ColonySequence, StepOperator } from '../types'
-import { formatTs, localDateStr } from '../utils'
+import { formatTs, localDateStr, localDayStartUTC, localDayEndUTC } from '../utils'
 
 const PAGE_SIZE = 100
 
@@ -167,8 +167,8 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
     const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (siteId) p.set('site_id', siteId)
     if (uuidSearch) p.set('q', uuidSearch)
-    if (startDate) p.set('start', startDate)
-    if (endDate) p.set('end', endDate)
+    if (startDate) p.set('start', localDayStartUTC(startDate))
+    if (endDate) p.set('end', localDayEndUTC(endDate))
     fetch(`/api/uuids?${p}`)
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -191,7 +191,7 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
     fetch('/api/journey/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ steps, site_id: siteId || null, limit: PAGE_SIZE, offset, start: startDate || null, end: endDate || null }),
+      body: JSON.stringify({ steps, site_id: siteId || null, limit: PAGE_SIZE, offset, start: startDate ? localDayStartUTC(startDate) : null, end: endDate ? localDayEndUTC(endDate) : null }),
     })
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -227,8 +227,8 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
     ids.forEach(id => {
       setCountLoading(prev => ({ ...prev, [id]: true }))
       const p = new URLSearchParams()
-      if (sd) p.set('start', sd)
-      if (ed) p.set('end', ed)
+      if (sd) p.set('start', localDayStartUTC(sd))
+      if (ed) p.set('end', localDayEndUTC(ed))
       fetch(`/api/colonies/${id}/count?${p}`)
         .then(r => r.json())
         .then(d => setColonyCounts(prev => ({ ...prev, [id]: d.count })))
@@ -338,8 +338,8 @@ export default function Colonies({ siteId, siteName, startDate, endDate, onColon
         site_id: colony.site_id || siteId || null,
         limit: PAGE_SIZE,
         offset,
-        start: startDate || null,
-        end: endDate || null,
+        start: startDate ? localDayStartUTC(startDate) : null,
+        end: endDate ? localDayEndUTC(endDate) : null,
       }),
     })
       .then(r => r.json())

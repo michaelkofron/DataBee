@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConditionStep, Colony, Journey, JourneyEvent, Pollination, PollinationCount, UuidRow } from '../types'
-import { formatTs, localDateStr } from '../utils'
+import { formatTs, localDateStr, localDayStartUTC, localDayEndUTC } from '../utils'
 
 function colonySummary(steps: ConditionStep[]): string {
   return steps.map((step, si) => {
@@ -179,8 +179,8 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
   const countPollination = useCallback((id: string) => {
     setCountLoading(prev => ({ ...prev, [id]: true }))
     const p = new URLSearchParams()
-    if (startDate) p.set('start', startDate)
-    if (endDate) p.set('end', endDate)
+    if (startDate) p.set('start', localDayStartUTC(startDate))
+    if (endDate) p.set('end', localDayEndUTC(endDate))
     fetch(`/api/pollinations/${id}/count?${p}`)
       .then(r => r.json())
       .then((data: PollinationCount) => setCounts(prev => ({ ...prev, [id]: data })))
@@ -202,8 +202,8 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
     if (append) setOverlapLoadingMore(true)
     else setOverlapUuidLoading(prev => ({ ...prev, [id]: true }))
     const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
-    if (startDate) p.set('start', startDate)
-    if (endDate) p.set('end', endDate)
+    if (startDate) p.set('start', localDayStartUTC(startDate))
+    if (endDate) p.set('end', localDayEndUTC(endDate))
     fetch(`/api/pollinations/${id}/overlap-uuids?${p}`)
       .then(r => r.json())
       .then((data: { total: number; items: UuidRow[] }) => {
@@ -258,8 +258,8 @@ export default function Pollinate({ siteId, siteName, startDate, endDate, coloni
     if (!selectedA || !selectedB) { setPreviewCount(null); return }
     setPreviewLoading(true)
     const p = new URLSearchParams({ colony_a: selectedA, colony_b: selectedB })
-    if (startDate) p.set('start', startDate)
-    if (endDate) p.set('end', endDate)
+    if (startDate) p.set('start', localDayStartUTC(startDate))
+    if (endDate) p.set('end', localDayEndUTC(endDate))
     fetch(`/api/colonies/compare?${p}`)
       .then(r => r.json())
       .then((data: PollinationCount) => setPreviewCount(data))
