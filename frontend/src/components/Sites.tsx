@@ -11,7 +11,6 @@ export default function Sites({ onSitesMutated }: { onSitesMutated: () => void }
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [editingEvents, setEditingEvents] = useState<string | null>(null)
-  const [eventDraft, setEventDraft] = useState('')
   const [eventInput, setEventInput] = useState('')
 
   const fetchSites = () => {
@@ -60,7 +59,6 @@ export default function Sites({ onSitesMutated }: { onSitesMutated: () => void }
 
   const startEditingEvents = (site: Site) => {
     setEditingEvents(site.site_id)
-    setEventDraft(site.allowed_actions.join(', '))
     setEventInput('')
   }
 
