@@ -144,7 +144,7 @@
             obs.unobserve(entries[j].target);
           }
         }
-      },{threshold:0.5});
+      },{threshold:0.1});
       for(var k=0;k<views.length;k++){
         obs.observe(views[k]);
       }
