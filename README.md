@@ -24,7 +24,7 @@ The whole backend is four Python files and a single DuckDB database file. The fr
 
 **Date range picker** — presets for the common cases (past 24 hours, last 7/28/90 days, this month, last month, year to date) plus a custom from/to picker. Your selection is persisted between sessions.
 
-**Password protection** — optional. Set `AUTH_ENABLED=true` and `ADMIN_PASSWORD` in your `.env` and the dashboard is gated behind a login screen. Uses a secure HMAC session cookie — no database, no user table, just an env variable.
+**Password protection** — optional. Set `AUTH_ENABLED=true` and `ADMIN_PASSWORD` in your `.env` and the dashboard is gated behind a login screen. Uses a secure HMAC session cookie — no database, no user table, just an env variable. Set `AUTH_SECRET` to a stable random string so sessions survive server restarts.
 
 ---
 
@@ -86,6 +86,7 @@ Point the platform at this repository. It will detect the `Dockerfile` and build
 |---|---|---|
 | `AUTH_ENABLED` | Recommended | Set to `true` to require a password |
 | `ADMIN_PASSWORD` | Recommended | The dashboard password |
+| `AUTH_SECRET` | Recommended | 64-character hex string used to sign session cookies. Without it, sessions reset on every restart. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `SECURE_COOKIES` | Recommended | Set to `true` when serving over HTTPS |
 | `DB_PATH` | Optional | Path to the DuckDB file (default: `storage/humblebee.duckdb`) |
 

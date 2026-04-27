@@ -29,7 +29,7 @@ app = FastAPI(title="Humblebee")
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "").lower() in ("true", "1", "yes")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 SECURE_COOKIES = os.environ.get("SECURE_COOKIES", "").lower() in ("true", "1", "yes")
-_AUTH_SECRET = secrets.token_hex(32)
+_AUTH_SECRET = os.environ.get("AUTH_SECRET") or secrets.token_hex(32)
 
 _login_attempts: dict[str, list[float]] = {}
 _LOGIN_WINDOW = 60.0
